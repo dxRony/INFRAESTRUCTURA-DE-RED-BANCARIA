@@ -1,0 +1,5 @@
+Proyecto_1/
+*.gns3project
+*.img
+*.qcow2
+*.bin
