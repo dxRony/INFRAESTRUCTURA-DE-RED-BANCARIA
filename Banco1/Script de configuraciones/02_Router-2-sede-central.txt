@@ -1,0 +1,263 @@
+===============================================================================
+  CONFIG COMPLETA - ROUTER-2-SEDE-CENTRAL
+  Banco 1 (anillo red-bancaria) - extraido via consola GNS3 5007
+===============================================================================
+
+>>> Este archivo es la config EXACTA (show running-config) + tablas extra.
+>>> Advertencia: los hashes enable secret/privilege NO son reales del laboratorio.
+
+########## RUNNING-CONFIG
+
+version 15.6
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+!
+hostname Router-2-sede-central
+!
+boot-start-marker
+boot-end-marker
+!
+!
+enable secret 5 $1$WaN2$OCT/LTDIGQMkdpNOB9xjQ1
+!
+no aaa new-model
+ethernet lmi ce
+!
+!
+!
+mmi polling-interval 60
+no mmi auto-configure
+no mmi pvc
+mmi snmp-timeout 180
+!
+!
+!
+!
+!
+no ip icmp rate-limit unreachable
+!
+!
+!
+!
+!
+!
+no ip domain lookup
+ip domain name banco1.local
+ip cef
+no ipv6 cef
+!
+multilink bundle-name authenticated
+!
+!
+!
+!
+username admin privilege 15 secret 5 $1$bLh2$txIzfF8yrrgcq00JTojU/0
+!
+redundancy
+!
+no cdp log mismatch duplex
+!
+ip tcp synwait-time 5
+! 
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+interface GigabitEthernet0/0
+ no ip address
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/0.10
+ encapsulation dot1Q 10
+ ip address 172.16.10.3 255.255.255.240
+ ip access-group ACL_CAJA_SEDE in
+ ip access-group CAJA_OUT out
+ standby 0 priority 90
+ standby 0 preempt
+ standby 10 ip 172.16.10.1
+ standby 10 priority 90
+ standby 10 preempt
+!
+interface GigabitEthernet0/0.20
+ encapsulation dot1Q 20
+ ip address 172.16.20.3 255.255.255.0
+ ip access-group SSH-L3-SEDE out
+ standby 20 ip 172.16.20.1
+ standby 20 priority 90
+ standby 20 preempt
+!
+interface GigabitEthernet0/0.30
+ encapsulation dot1Q 30
+ ip address 172.16.30.3 255.255.255.248
+ ip access-group ACL_SERVERS_SEDE in
+ ip access-group SERVERS_OUT out
+ standby 30 ip 172.16.30.1
+ standby 30 priority 90
+ standby 30 preempt
+!
+interface GigabitEthernet0/1
+ ip address 10.10.1.1 255.255.255.252
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/2
+ ip address 172.16.1.1 255.255.255.252
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/3
+ no ip address
+ shutdown
+ duplex auto
+ speed auto
+ media-type rj45
+!
+ip forward-protocol nd
+!
+!
+no ip http server
+no ip http secure-server
+ip route 0.0.0.0 0.0.0.0 172.16.1.2 20
+ip route 10.0.0.0 255.255.255.252 172.16.1.2
+ip route 172.16.40.0 255.255.255.240 10.10.1.2 10
+ip route 172.16.40.0 255.255.255.240 172.16.10.2 20
+ip route 172.16.50.0 255.255.255.0 10.10.1.2 10
+ip route 172.16.50.0 255.255.255.0 172.16.20.2 20
+ip route 172.16.50.0 255.255.255.0 172.16.10.2 20
+ip ssh version 2
+!
+ip access-list standard SSH-ADMIN
+ permit 172.16.20.4
+ deny   any
+!
+ip access-list extended ACL_CAJA_SEDE
+ evaluate CAJA_REFLECT 
+ permit tcp 172.16.10.0 0.0.0.15 host 172.16.30.5 eq www
+ permit icmp 172.16.10.0 0.0.0.15 host 172.16.30.5
+ deny   ip 172.16.10.0 0.0.0.15 172.16.30.0 0.0.0.7
+ deny   ip 172.16.10.0 0.0.0.15 172.16.20.0 0.0.0.255
+ deny   ip 172.16.10.0 0.0.0.15 172.16.50.0 0.0.0.255
+ deny   ip 172.16.10.0 0.0.0.15 172.16.40.0 0.0.0.15
+ permit ip any any
+ip access-list extended ACL_SERVERS_SEDE
+ permit tcp host 172.16.30.5 10.0.0.0 0.0.0.255 eq 5001
+ evaluate SERVERS_REFLECT 
+ permit udp 172.16.30.0 0.0.0.7 host 224.0.0.2 eq 1985
+ deny   ip 172.16.30.0 0.0.0.7 any
+ permit ip any any
+ip access-list extended CAJA_OUT
+ permit icmp 172.16.20.0 0.0.0.255 172.16.10.0 0.0.0.15 echo reflect CAJA_REFLECT timeout 300
+ permit tcp 172.16.20.0 0.0.0.255 172.16.10.0 0.0.0.15 reflect CAJA_REFLECT timeout 300
+ permit ip any any
+ip access-list extended SERVERS_OUT
+ permit udp 172.16.30.0 0.0.0.7 host 224.0.0.2 eq 1985
+ permit tcp 172.16.20.0 0.0.0.255 172.16.30.0 0.0.0.7 reflect SERVERS_REFLECT timeout 300
+ permit icmp 172.16.20.0 0.0.0.255 172.16.30.0 0.0.0.7 reflect SERVERS_REFLECT timeout 300
+ permit tcp 172.16.50.0 0.0.0.255 172.16.30.0 0.0.0.7 reflect SERVERS_REFLECT timeout 300
+ permit icmp 172.16.50.0 0.0.0.255 172.16.30.0 0.0.0.7 reflect SERVERS_REFLECT timeout 300
+ permit tcp 172.16.10.0 0.0.0.15 host 172.16.30.5 eq www reflect SERVERS_REFLECT timeout 300
+ permit icmp 172.16.10.0 0.0.0.15 host 172.16.30.5 reflect SERVERS_REFLECT timeout 300
+ permit tcp 172.16.40.0 0.0.0.15 host 172.16.30.5 eq www reflect SERVERS_REFLECT timeout 300
+ permit icmp 172.16.40.0 0.0.0.15 host 172.16.30.5 reflect SERVERS_REFLECT timeout 300
+ permit ip any 172.16.30.0 0.0.0.7 reflect SERVERS_REFLECT timeout 300
+ permit ip any any
+ip access-list extended SSH-L3-SEDE
+ permit tcp host 172.16.20.4 172.16.10.0 0.0.0.15 eq 22
+ permit tcp host 172.16.20.4 172.16.20.0 0.0.0.255 eq 22
+ permit tcp host 172.16.20.4 172.16.30.0 0.0.0.7 eq 22
+ deny   tcp any 172.16.10.0 0.0.0.15 eq 22
+ deny   tcp any 172.16.20.0 0.0.0.255 eq 22
+ deny   tcp any 172.16.30.0 0.0.0.7 eq 22
+ permit ip any any
+!
+!
+!
+!
+control-plane
+!
+banner exec ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+banner incoming ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+banner login ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+!
+line con 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line aux 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line vty 0 4
+ access-class SSH-ADMIN in
+ login local
+ transport input ssh
+!
+no scheduler allocate
+!
+end
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       o - ODR, P - periodic downloaded static route, H - NHRP, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+Gateway of last resort is 172.16.1.2 to network 0.0.0.0
+S*    0.0.0.0/0 [20/0] via 172.16.1.2
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+S        10.0.0.0/30 [1/0] via 172.16.1.2
+C        10.10.1.0/30 is directly connected, GigabitEthernet0/1
+L        10.10.1.1/32 is directly connected, GigabitEthernet0/1
+      172.16.0.0/16 is variably subnetted, 10 subnets, 5 masks
+C        172.16.1.0/30 is directly connected, GigabitEthernet0/2
+L        172.16.1.1/32 is directly connected, GigabitEthernet0/2
+C        172.16.10.0/28 is directly connected, GigabitEthernet0/0.10
+L        172.16.10.3/32 is directly connected, GigabitEthernet0/0.10
+C        172.16.20.0/24 is directly connected, GigabitEthernet0/0.20
+L        172.16.20.3/32 is directly connected, GigabitEthernet0/0.20
+C        172.16.30.0/29 is directly connected, GigabitEthernet0/0.30
+L        172.16.30.3/32 is directly connected, GigabitEthernet0/0.30
+S        172.16.40.0/28 [10/0] via 10.10.1.2
+S        172.16.50.0/24 [10/0] via 10.10.1.2
+% Incomplete command.
+Router-2-sede-central#
+

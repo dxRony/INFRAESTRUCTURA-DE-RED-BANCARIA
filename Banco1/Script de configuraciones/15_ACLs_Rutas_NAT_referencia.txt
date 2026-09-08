@@ -1,0 +1,79 @@
+===============================================================================
+  REFERENCIA - RUTAS IP, ACLs, NAT y TABLAS (Banco 1 en vivo)
+  Extraido 2026-09-12 desde consolas reales (show output)
+===============================================================================
+
+-------------------------------------------------------------------------------
+ R1) ROUTER-1-SEDE-CENTRAL - TABLA ip route (primarias)
+-------------------------------------------------------------------------------
+S 10.0.0.0/30  [10/0] via 172.16.0.2          (FW -> anillo)
+S 10.0.0.4/30  [10/0] via 172.16.0.2
+S 10.0.0.8/30  [10/0] via 172.16.0.2
+S 10.0.0.12/30 [10/0] via 172.16.0.2
+S 10.0.0.16/30 [10/0] via 172.16.0.2
+C 10.10.0.0/30    Gi0/1     (10.10.0.1 <-> Router-sucursal)
+S 10.10.1.0/30  [1/0] via 172.16.10.3
+C 172.16.0.0/30    Gi0/2    (172.16.0.1 <-> FW)
+C 172.16.10.0/28   Gi0/0.10 (VLAN CAJA_SEDE)
+C 172.16.20.0/24   Gi0/0.20 (VLAN ADMIN_SEDE)
+C 172.16.30.0/29   Gi0/0.30 (VLAN SERVIDORES)
+S 172.16.40.0/28 [10/0] via 10.10.0.2
+S 172.16.50.0/24 [10/0] via 10.10.0.2
+
+ R2) ROUTER-2-SEDE-CENTRAL - TABLA ip route
+-------------------------------------------------------------------------------
+S 10.0.0.0/30  [1/0] via 172.16.1.2
+C 10.10.1.0/30    Gi0/1     (10.10.1.1 <-> Router-sucursal)
+C 172.16.1.0/30   Gi0/2     (172.16.1.1 <-> FW)
+C 172.16.10.0/28, 172.16.20.0/24, 172.16.30.0/29 (subinterfaces Gi0/0.10/.20/.30)
+
+ R3) ROUTER-SUCURSAL-1 - TABLA ip route
+-------------------------------------------------------------------------------
+C 10.10.0.0/30    Gi0/1  (10.10.0.2 <-> Router-1)
+C 10.10.1.0/30    Gi0/2  (10.10.1.2 <-> Router-2)
+S 172.16.0.0/30 [1/0] via 10.10.0.1
+S 172.16.1.0/30 [1/0] via 10.10.0.1
+S 172.16.10.0/28 [10/0] via 10.10.0.1
+S 172.16.20.0/24 [10/0] via 10.10.0.1
+S 172.16.30.0/29 [10/0] via 10.10.0.1
+   S 0.0.0.0/0 [10/0] via 10.10.0.1 (preferida)
+   S 0.0.0.0/0 [20/0] via 10.10.1.1 (backup)
+C 172.16.40.0/28  Gi0/0.40 (VLAN CAJA_SUCURSAL)
+C 172.16.50.0/24  Gi0/0.50 (VLAN ADMIN_SUCURSAL)
+
+ R4) ROUTER-SALIDA - (estado por defecto IOSv, sin rutas/NAT definidos)
+-------------------------------------------------------------------------------
+>>> Solo interfaces Gi0/1-3 shutdown, Gi0/0 sin IP, hostname "Router".
+>>> PENDIENTE DE CONFIRMACION del rol de salida (NAT/failover del anillo
+>>> segun diseno vive aqui). No llegaba trafico de salida del banco al
+>>> momento de la extraccion (default FW -> 10.10.2.1 no responde config).
+
+-------------------------------------------------------------------------------
+ ACLs (extractos de running-config)
+-------------------------------------------------------------------------------
+ ROUTER-SUCURSAL:
+   ssh-ADMIN (standard): permit 172.16.50.3; permit 172.16.20.4; deny any
+   SSH-L3-SUC (ext): ssh desde ADMIN_SEDE(.20.4) y ADMIN_SUC(.50.3) hacia
+        VLAN40 (eq 22) y VLAN50 (eq 22)
+   access-list 105 (PAT): permit 172.16.40.0/28 any + 172.16.50.0/24 any
+   ip nat inside source list 105 interface Gi0/1 overload   <-- NAT/PAT salida
+
+ ROUTER-1 y ROUTER-2 (idénticas en ambos):
+   ACL_CAJA_SEDE (Gi0/0.10 in): evaluate CAJA_REFLECT; permit tcp caja->web(www);
+        permit icmp caja->web; deny caja->servidores/admin/suc...
+   CAJA_OUT (Gi0/0.10 out): reflect icmp/tcp de ADMIN(20.0/24) hacia CAJA;
+        permit ip any any
+   SERVERS_OUT (Gi0/0.30 out): reflect hacia servidores + permit
+   ACL_SERVERS_SEDE (Gi0/0.30 in): permit web->anillo 5001;
+        evaluate SERVERS_REFLECT; permit udp 224.0.0.2:1985 (HSRP); deny else;
+        permit ip any any
+   SSH-L3-SEDE (Gi0/0.20 out?): ssh desde admin.sede hacia VLAN10/20/30 eq22;
+        deny ssh from el resto
+
+-------------------------------------------------------------------------------
+ HSRP (router-1 activo, prio 110 preempt; router-2 backup default 100)
+-------------------------------------------------------------------------------
+ R1: standby 10/20/30 ip 172.16.10.1/172.16.20.1/172.16.30.1
+     priority 110, preempt (en cada VLAN)
+ R2: standby 10/20/30 ip 172.16.10.1/172.16.20.1/172.16.30.1
+     priority 90, preempt (role standby/backup)

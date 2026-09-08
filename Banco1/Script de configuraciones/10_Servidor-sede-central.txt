@@ -1,0 +1,463 @@
+===============================================================================
+  CONFIG COMPLETA - SERVIDOR-SEDE-CENTRAL
+  Banco 1 (anillo red-bancaria) - extraido via consola 5025 (TinyCore)
+===============================================================================
+
+>>> IP: 172.16.30.4/29  gw 172.16.30.1  (VLAN30 SERVIDORES_SEDE)
+>>> OS: TinyCore linux-tinycore-11.1.qcow2  (usuario tc, sin password 4 sudo)
+>>> Servicio: DB bancaria multidivisa (sqlite) db_server.py + bank.db
+>>> Acceso SSH: openssh inicia en bootlocal. User gns3/gns3.
+
+########## 1) /opt/bootlocal.sh ################
+cat /opt/bootlocal.sh
+#!/bin/sh
+# put other system startup commands here
+/usr/local/etc/init.d/openssh start &
+ifconfig eth0 172.16.30.4 netmask 255.255.255.248
+route add default  gw 172.16.30.1
+sudo /sbin/getty -L 115200 ttyS0 vt100 &
+
+# === DB AUTO (persist) ===
+sudo python3.6 /home/tc/db_server.py >/tmp/db_server.log 2>&1 &
+( while true; do pgrep -f "python3.6 /home/tc/db_server.py" >/dev/null || ( sudo sh -c "nohup python3.6 /home/tc/db_server.py >>/tmp/db_server.log 2>&1 &" ); sleep 6; done ) 2>/dev/null &
+tc@box:~$ ls -la /home/tc/ 2>/dev/null
+
+########## 2) /etc/resolv.conf ################
+nameserver 8.8.8.8   (configurado)
+
+########## 3) db_server.py (script completo, 400 lineas) ################
+#!/usr/bin/env python3
+"""
+Servidor DB - Banco 1 (con empleados, roles y auditoria)
+Corre en: Servidor-sede-central (172.16.30.4)
+Solo usa librerias estandar: http.server, sqlite3, json
+"""
+
+import sqlite3
+import json
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse, parse_qs
+
+DB_FILE = "/home/tc/bank.db"
+PORT = 5000
+
+
+def get_conn():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS empleados (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT UNIQUE NOT NULL,
+            contrasena TEXT NOT NULL,
+            nombre TEXT NOT NULL,
+            rol TEXT NOT NULL CHECK (rol IN ('admin', 'cajero'))
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cuentas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            saldo REAL NOT NULL,
+            creado_por INTEGER,
+            fecha_creacion TEXT,
+            FOREIGN KEY (creado_por) REFERENCES empleados(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS transacciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cuenta_id INTEGER NOT NULL,
+            cuenta_destino INTEGER,
+            tipo TEXT NOT NULL,
+            monto REAL NOT NULL,
+            empleado_id INTEGER NOT NULL,
+            fecha TEXT NOT NULL,
+            FOREIGN KEY (cuenta_id) REFERENCES cuentas(id),
+            FOREIGN KEY (empleado_id) REFERENCES empleados(id)
+        )
+    """)
+
+    cur.execute("SELECT COUNT(*) FROM empleados")
+    if cur.fetchone()[0] == 0:
+        cur.executemany(
+            "INSERT INTO empleados (usuario, contrasena, nombre, rol) VALUES (?, ?, ?, ?)",
+            [
+                ("admin", "admin123", "Administrador General", "admin"),
+                ("cajero.sede", "cajero123", "Cajero Sede Central", "cajero"),
+                ("admin.sede", "admin123", "Administrador Sede Central", "admin"),
+                ("cajero.sucursal", "cajero123", "Cajero Sucursal 1", "cajero"),
+                ("admin.sucursal", "admin123", "Administrador Sucursal 1", "admin"),
+            ],
+        )
+        conn.commit()
+
+    cur.execute("SELECT COUNT(*) FROM cuentas")
+    if cur.fetchone()[0] == 0:
+        admin_id = cur.execute(
+            "SELECT id FROM empleados WHERE usuario = 'admin'"
+        ).fetchone()["id"]
+        ahora = datetime.now().isoformat(timespec="seconds")
+        cur.executemany(
+            "INSERT INTO cuentas (nombre, saldo) VALUES (?, ?)",
+            [
+                ("Juan Perez", 1500.00),
+                ("Maria Lopez", 3200.50),
+                ("Cliente Sucursal", 800.00),
+            ],
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def get_empleado_por_usuario(usuario):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM empleados WHERE usuario = ?", (usuario,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_empleado_por_id(empleado_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM empleados WHERE id = ?", (empleado_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def es_admin(empleado_id):
+    emp = get_empleado_por_id(empleado_id)
+    return emp is not None and emp["rol"] == "admin"
+
+
+def es_cajero(empleado_id):
+    emp = get_empleado_por_id(empleado_id)
+    return emp is not None and emp["rol"] == "cajero"
+
+
+def get_cuenta(cuenta_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM cuentas WHERE id = ?", (cuenta_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def listar_cuentas():
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT c.id, c.nombre, c.saldo
+        FROM cuentas c
+        ORDER BY c.id
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def crear_cuenta(nombre, saldo_inicial, empleado_id):
+    conn = get_conn()
+    ahora = datetime.now().isoformat(timespec="seconds")
+    cur = conn.execute(
+        "INSERT INTO cuentas (nombre, saldo) VALUES (?, ?)",
+        (nombre, saldo_inicial, empleado_id, ahora),
+    )
+    conn.commit()
+    nuevo_id = cur.lastrowid
+    conn.close()
+    return nuevo_id
+
+
+def actualizar_saldo(cuenta_id, nuevo_saldo):
+    conn = get_conn()
+    conn.execute("UPDATE cuentas SET saldo = ? WHERE id = ?", (nuevo_saldo, cuenta_id))
+    conn.commit()
+    conn.close()
+
+
+def registrar_transaccion(cuenta_id, tipo, monto, empleado_id, cuenta_destino=None):
+    conn = get_conn()
+    ahora = datetime.now().isoformat(timespec="seconds")
+    conn.execute(
+        "INSERT INTO transacciones (cuenta_id, cuenta_destino_id, tipo, monto, usuario_id, sucursal_id, fecha) "
+        "VALUES (?, ?, ?, ?, ?, 1, ?)",
+        (cuenta_id, cuenta_destino, tipo, monto, empleado_id, ahora),
+    )
+    conn.commit()
+    conn.close()
+
+
+def listar_transacciones():
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT t.id, t.tipo, t.monto, t.fecha,
+               c1.nombre AS cuenta_nombre,
+               c2.nombre AS cuenta_destino_nombre,
+               e.nombre AS empleado_nombre, e.usuario AS empleado_usuario
+        FROM transacciones t
+        JOIN cuentas c1 ON t.cuenta_id = c1.id
+        LEFT JOIN cuentas c2 ON t.cuenta_destino_id = c2.id
+        LEFT JOIN empleados e ON t.usuario_id = e.id
+        ORDER BY t.id DESC
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def crear_empleado(usuario, contrasena, nombre, rol):
+    conn = get_conn()
+    try:
+        cur = conn.execute(
+            "INSERT INTO empleados (usuario, contrasena, nombre, rol) VALUES (?, ?, ?, ?)",
+            (usuario, contrasena, nombre, rol),
+        )
+        conn.commit()
+        nuevo_id = cur.lastrowid
+        conn.close()
+        return nuevo_id, None
+    except sqlite3.IntegrityError:
+        conn.close()
+        return None, "el usuario ya existe"
+
+
+def listar_empleados():
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT id, usuario, nombre, rol FROM empleados ORDER BY id"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+class DBHandler(BaseHTTPRequestHandler):
+
+    def _send_json(self, status, data):
+        body = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json_body(self):
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length)
+        return json.loads(raw) if raw else {}
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+
+        if parsed.path == "/saldo":
+            if "id" not in params:
+                self._send_json(400, {"error": "falta parametro id"})
+                return
+            cuenta = get_cuenta(int(params["id"][0]))
+            if cuenta is None:
+                self._send_json(404, {"error": "cuenta no existe"})
+            else:
+                self._send_json(200, cuenta)
+
+        elif parsed.path == "/cuentas":
+            self._send_json(200, listar_cuentas())
+
+        elif parsed.path == "/empleados":
+            empleado_id = params.get("empleado_id", [None])[0]
+            if not empleado_id or not es_admin(int(empleado_id)):
+                self._send_json(403, {"error": "solo un admin puede ver empleados"})
+                return
+            self._send_json(200, listar_empleados())
+
+        elif parsed.path == "/transacciones":
+            empleado_id = params.get("empleado_id", [None])[0]
+            if not empleado_id or not es_admin(int(empleado_id)):
+                self._send_json(403, {"error": "solo un admin puede ver el reporte"})
+                return
+            self._send_json(200, listar_transacciones())
+
+        else:
+            self._send_json(404, {"error": "ruta no encontrada"})
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        try:
+            data = self._read_json_body()
+        except json.JSONDecodeError:
+            self._send_json(400, {"error": "JSON invalido"})
+            return
+
+        if parsed.path == "/login":
+            usuario = data.get("usuario", "")
+            contrasena = data.get("contrasena", "")
+            emp = get_empleado_por_usuario(usuario)
+            if emp is None or emp["contrasena"] != contrasena:
+                self._send_json(401, {"error": "usuario o contrasena incorrectos"})
+                return
+            self._send_json(200, {
+                "id": emp["id"], "nombre": emp["nombre"], "rol": emp["rol"],
+            })
+
+        elif parsed.path == "/clientes":
+            empleado_id = data.get("empleado_id")
+            nombre = data.get("nombre")
+            saldo_inicial = data.get("saldo_inicial", 0)
+            if not empleado_id or not es_admin(empleado_id):
+                self._send_json(403, {"error": "solo un admin puede crear clientes"})
+                return
+            if not nombre:
+                self._send_json(400, {"error": "falta el nombre del cliente"})
+                return
+            nuevo_id = crear_cuenta(nombre, float(saldo_inicial), empleado_id)
+            self._send_json(200, {"id": nuevo_id, "nombre": nombre, "saldo": float(saldo_inicial)})
+
+        elif parsed.path == "/empleados":
+            empleado_id = data.get("empleado_id")
+            if not empleado_id or not es_admin(empleado_id):
+                self._send_json(403, {"error": "solo un admin puede crear usuarios"})
+                return
+            usuario = data.get("usuario")
+            contrasena = data.get("contrasena")
+            nombre = data.get("nombre")
+            rol = data.get("rol")
+            if not all([usuario, contrasena, nombre, rol]) or rol not in ("admin", "cajero"):
+                self._send_json(400, {"error": "datos invalidos"})
+                return
+            nuevo_id, error = crear_empleado(usuario, contrasena, nombre, rol)
+            if error:
+                self._send_json(400, {"error": error})
+            else:
+                self._send_json(200, {"id": nuevo_id, "usuario": usuario, "rol": rol})
+
+        elif parsed.path == "/deposito":
+            self._operacion(data, "deposito")
+
+        elif parsed.path == "/retiro":
+            self._operacion(data, "retiro")
+
+        elif parsed.path == "/transferencia":
+            self._transferencia(data)
+
+        else:
+            self._send_json(404, {"error": "ruta no encontrada"})
+
+    def _operacion(self, data, tipo):
+        empleado_id = data.get("empleado_id")
+        cuenta_id = data.get("id")
+        monto = data.get("monto")
+
+        if not empleado_id or not es_cajero(empleado_id):
+            self._send_json(403, {"error": "solo un cajero puede hacer esta operacion"})
+            return
+        if cuenta_id is None or monto is None or monto <= 0:
+            self._send_json(400, {"error": "datos invalidos"})
+            return
+
+        cuenta = get_cuenta(cuenta_id)
+        if cuenta is None:
+            self._send_json(404, {"error": "cuenta no existe"})
+            return
+
+        if tipo == "deposito":
+            nuevo_saldo = cuenta["saldo"] + monto
+        else:
+            if cuenta["saldo"] < monto:
+                self._send_json(400, {"error": "fondos insuficientes"})
+                return
+            nuevo_saldo = cuenta["saldo"] - monto
+
+        actualizar_saldo(cuenta_id, nuevo_saldo)
+        registrar_transaccion(cuenta_id, tipo, monto, empleado_id)
+        self._send_json(200, {"id": cuenta_id, "saldo": nuevo_saldo})
+
+    def _transferencia(self, data):
+        empleado_id = data.get("empleado_id")
+        origen_id = data.get("origen")
+        destino_id = data.get("destino")
+        monto = data.get("monto")
+
+        if not empleado_id or not es_cajero(empleado_id):
+            self._send_json(403, {"error": "solo un cajero puede hacer transferencias"})
+            return
+        if not all([origen_id, destino_id, monto]) or monto <= 0:
+            self._send_json(400, {"error": "datos invalidos"})
+            return
+        if origen_id == destino_id:
+            self._send_json(400, {"error": "origen y destino no pueden ser la misma cuenta"})
+            return
+
+        origen = get_cuenta(origen_id)
+        destino = get_cuenta(destino_id)
+        if origen is None or destino is None:
+            self._send_json(404, {"error": "cuenta origen o destino no existe"})
+            return
+        if origen["saldo"] < monto:
+            self._send_json(400, {"error": "fondos insuficientes"})
+            return
+
+        actualizar_saldo(origen_id, origen["saldo"] - monto)
+        actualizar_saldo(destino_id, destino["saldo"] + monto)
+        registrar_transaccion(origen_id, "transferencia", monto, empleado_id, cuenta_destino=destino_id)
+
+        self._send_json(200, {
+            "origen": {"id": origen_id, "saldo": origen["saldo"] - monto},
+            "destino": {"id": destino_id, "saldo": destino["saldo"] + monto},
+        })
+
+    def log_message(self, format, *args):
+        print("[DB] %s" % (format % args))
+
+
+if __name__ == "__main__":
+    init_db()
+    server = HTTPServer(("0.0.0.0", PORT), DBHandler)
+    print(f"Servidor DB escuchando en puerto {PORT}...")
+    server.serve_forever()
+tc@box:~$ 
+########## 4) /home/tc/bank.db (SQLite) - esquema y datos ################
+>>> Esquema (visto via python3.6 sqlite3 en el host):
+>>> CREATE TABLE sucursales (id INTEGER PRIMARY KEY, nombre TEXT NOT NULL)
+>>> CREATE TABLE cuentas (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, saldo REAL NOT NULL)
+>>> CREATE TABLE transacciones (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL, cuenta_id INTEGER NOT NULL, cuenta_destino_id INTEGER, monto REAL NOT NULL, usuario_id INTEGER NOT NULL, sucursal_id INTEGER NOT NULL, fecha TEXT NOT NULL)
+>>> CREATE TABLE usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, rol TEXT DEFAULT  cajero , sucursal_id INTEGER DEFAULT 1, nombre TEXT, nombre_completo TEXT)
+>>> CREATE TABLE empleados (id INTEGER PRIMARY KEY AUTOINCREMENT, usuario TEXT UNIQUE NOT NULL, contrasena TEXT NOT NULL, nombre TEXT NOT NULL, rol TEXT NOT NULL CHECK (rol IN ( admin , cajero )))
+
+nt('SUCURSALES');[print(r) for r in c.execute('SELECT * FROM sucursales')]"
+SUCURSALES
+(1, 'Sede Central')
+(2, 'Sucursal 1')
+tc@box:~$ python3.6 -c "import sqlite3;c=sqlite3.connect('/home/tc/bank.db');pri
+nt('EMPLEADOS');[print(r) for r in c.execute('SELECT * FROM empleados')]"
+EMPLEADOS
+(1, 'admin', 'admin123', 'Administrador General', 'admin')
+(2, 'cajero.sede', 'cajero123', 'Cajero Sede Central', 'cajero')
+(3, 'admin.sede', 'admin123', 'Administrador Sede Central', 'admin')
+(4, 'cajero.sucursal', 'cajero123', 'Cajero Sucursal 1', 'cajero')
+(5, 'admin.sucursal', 'admin123', 'Administrador Sucursal 1', 'admin')
+(6, 'caj', 'caj', 'caj', 'cajero')
+tc@box:~$ >>> CUENTAS/EMPLEADOS (datos vivos):
+python3.6 -c "import sqlite3;c=sqlite3.connect('/home/tc/bank.db');pri
+nt('CUENTAS');[print(r) for r in c.execute('SELECT * FROM cuentas')]"
+CUENTAS
+(1, 'Juan Perez', 1574.0)
+(2, 'Maria Lopez', 18820.5)
+(3, 'Cliente Sucursal', 780.0)
+tc@box:~$ python3.6 -c "import sqlite3;c=sqlite3.connect('/home/tc/bank.db');pri
+nt('USUARIOS');[print(r) for r in c.execute('SELECT id,username,rol,sucursal_id,
+nombre,nombre_completo FROM usuarios')]"
+USUARIOS
+(1, 'cajero_central', 'cajero', 1, 'Cajero Principal', 'Cajero Principal')
+(2, 'admin_suc1', 'admin', 1, 'Admin Sucursal 1', 'Admin Sucursal 1')

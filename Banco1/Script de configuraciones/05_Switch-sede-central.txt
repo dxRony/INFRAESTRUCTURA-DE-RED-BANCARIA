@@ -1,0 +1,313 @@
+===============================================================================
+  CONFIG COMPLETA - SWITCH-SEDE-CENTRAL
+  Banco 1 (anillo red-bancaria) - extraido via consola GNS3 5012
+===============================================================================
+
+>>> RUNNING-CONFIG + VLAN brief + Spanning-Tree
+>>> IP gestion: 172.16.20.10  |  VLAN10/20/30
+
+########## RUNNING-CONFIG
+
+version 15.2
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+service compress-config
+!
+hostname Switch-sede-central
+!
+boot-start-marker
+boot-end-marker
+!
+!
+enable secret 5 $1$BOKd$NkLntkDrP5QKIxj5CIkeD0
+!
+username admin privilege 15 secret 5 $1$7puH$MTuwvvLqydZTsDmqfeRt91
+no aaa new-model
+!
+!
+!
+!
+!
+!
+!
+!
+ip domain-name banco1.local
+ip cef
+no ipv6 cef
+!
+!
+!
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+!
+vlan internal allocation policy ascending
+!
+! 
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+interface GigabitEthernet0/0
+ switchport access vlan 30
+ switchport mode access
+ switchport port-security mac-address sticky
+ switchport port-security mac-address sticky 0c0d.2138.0000
+ switchport port-security
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet0/1
+ switchport access vlan 10
+ switchport mode access
+ switchport port-security mac-address sticky
+ switchport port-security mac-address sticky 0ca4.09b1.0000
+ switchport port-security
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet0/2
+ switchport access vlan 20
+ switchport mode access
+ switchport port-security mac-address sticky
+ switchport port-security mac-address sticky 0ce2.409a.0000
+ switchport port-security
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet0/3
+ switchport access vlan 30
+ switchport trunk encapsulation dot1q
+ switchport mode access
+ switchport port-security mac-address sticky
+ switchport port-security mac-address sticky 0cf4.ba4e.0000
+ switchport port-security
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet1/0
+ switchport trunk allowed vlan 10,20,30
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet1/1
+ switchport trunk allowed vlan 10,20,30
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet1/2
+ switchport access vlan 30
+ switchport mode access
+ switchport port-security maximum 2
+ switchport port-security violation restrict
+ switchport port-security mac-address sticky
+ switchport port-security mac-address sticky 0242.8acb.7e00
+ switchport port-security
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet1/3
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet2/0
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet2/1
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet2/2
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet2/3
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet3/0
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet3/1
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet3/2
+ media-type rj45
+ negotiation auto
+!
+interface GigabitEthernet3/3
+ media-type rj45
+ negotiation auto
+!
+interface Vlan20
+ ip address 172.16.20.10 255.255.255.0
+!
+ip default-gateway 172.16.20.1
+ip forward-protocol nd
+!
+no ip http server
+no ip http secure-server
+!
+ip ssh version 2
+!
+ip access-list standard SSH-ADMIN
+ permit 172.16.20.4
+ deny   any
+!
+!
+!
+!
+!
+control-plane
+!
+banner exec ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+banner incoming ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+banner login ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+!
+line con 0
+line aux 0
+line vty 0 4
+ access-class SSH-ADMIN in
+ login local
+ transport input ssh
+!
+!
+end
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active    Gi1/3, Gi2/0, Gi2/1, Gi2/2
+                                                Gi2/3, Gi3/0, Gi3/1, Gi3/2
+                                                Gi3/3
+10   CAJA_SEDE                        active    Gi0/1
+20   ADMIN_SEDE                       active    Gi0/2
+30   SERVIDORES_SEDE                  active    Gi0/0, Gi0/3, Gi1/2
+1002 fddi-default                     act/unsup 
+1003 token-ring-default               act/unsup 
+1004 fddinet-default                  act/unsup 
+1005 trnet-default                    act/unsup 
+VLAN0001
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    32769
+             Address     0c65.b9f3.0000
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+  Bridge ID  Priority    32769  (priority 32768 sys-id-ext 1)
+             Address     0c65.b9f3.0000
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi1/3               Desg FWD 4         128.8    Shr 
+Gi2/0               Desg FWD 4         128.9    Shr 
+Gi2/1               Desg FWD 4         128.10   Shr 
+Gi2/2               Desg FWD 4         128.11   Shr 
+Gi2/3               Desg FWD 4         128.12   Shr 
+Gi3/0               Desg FWD 4         128.13   Shr 
+Gi3/1               Desg FWD 4         128.14   Shr 
+Gi3/2               Desg FWD 4         128.15   Shr 
+Gi3/3               Desg FWD 4         128.16   Shr 
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    32778
+             Address     0c65.b9f3.0000
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     0c65.b9f3.0000
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/1               Desg FWD 4         128.2    Shr 
+Gi1/0               Desg FWD 4         128.5    Shr 
+Gi1/1               Desg FWD 4         128.6    Shr 
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    32788
+             Address     0c65.b9f3.0000
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     0c65.b9f3.0000
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/2               Desg FWD 4         128.3    Shr 
+Gi1/0               Desg FWD 4         128.5    Shr 
+Gi1/1               Desg FWD 4         128.6    Shr 
+VLAN0030
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    32798
+             Address     0c65.b9f3.0000
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+  Bridge ID  Priority    32798  (priority 32768 sys-id-ext 30)
+             Address     0c65.b9f3.0000
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/0               Desg FWD 4         128.1    Shr 
+Gi0/3               Desg FWD 4         128.4    Shr 
+Gi1/0               Desg FWD 4         128.5    Shr 
+Gi1/1               Desg FWD 4         128.6    Shr 
+Gi1/2               Desg FWD 4         128.7    Shr 
+Port      Name               Status       Vlan       Duplex  Speed Type 
+Gi0/0                        connected    30           auto   auto unknown
+Gi0/1                        connected    10           auto   auto unknown
+Gi0/2                        connected    20           auto   auto unknown
+Gi0/3                        connected    30           auto   auto unknown
+Gi1/0                        connected    trunk        auto   auto unknown
+Gi1/1                        connected    trunk        auto   auto unknown
+Gi1/2                        connected    30           auto   auto unknown
+Gi1/3                        notconnect   1            auto   auto unknown
+Gi2/0                        notconnect   1            auto   auto unknown
+Gi2/1                        notconnect   1            auto   auto unknown
+Gi2/2                        notconnect   1            auto   auto unknown
+Gi2/3                        notconnect   1            auto   auto unknown
+Gi3/0                        notconnect   1            auto   auto unknown
+Gi3/1                        notconnect   1            auto   auto unknown
+Gi3/2                        notconnect   1            auto   auto unknown
+Gi3/3                        notconnect   1            auto   auto unknown
+Switch-sede-central#
+

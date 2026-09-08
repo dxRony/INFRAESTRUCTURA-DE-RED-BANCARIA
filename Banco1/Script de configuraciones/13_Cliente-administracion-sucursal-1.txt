@@ -1,0 +1,24 @@
+===============================================================================
+  CONFIG COMPLETA - CLIENTE-ADMINISTRACION-SUCURSAL-1
+  Banco 1 (anillo red-bancaria) - configuracion TinyCore LIVE (consola VNC 5903)
+===============================================================================
+
+>>> Nodo: qemu linux-tinycore-admin-suc-firefox.img (TinyCore Linux)
+>>> IP REAL confirmada (tabla ARP Router-sucursal): 172.16.50.3
+>>> Red: VLAN50 ADMIN_SUCURSAL 172.16.50.0/24 - gateway 172.16.50.1
+>>> Navegador Firefox (para tareas de administracion sucursal)
+
+########## /etc/resolv.conf (nameserver del Banco 1)
+nameserver 172.16.0.2
+
+########## /opt/bootlocal.sh  (patron estandar TinyCore del banco)
+#!/bin/sh
+modprobe ipv6
+sysctl -w net.ipv4.ip_forward=1
+sysctl -w net.ipv6.conf.all.forwarding=1
+ifconfig eth0 172.16.50.3 netmask 255.255.255.0
+route add default gw 172.16.50.1
+/usr/local/etc/init.d/openssh start
+
+>>> PENDIENTE DE CONFIRMACION: el bootlocal exacto no se extrae por VNC;
+>>> se usa el patron de caja-sucursal (unico shell accesible) + IP de ARP.

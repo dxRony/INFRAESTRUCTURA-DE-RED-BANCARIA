@@ -1,0 +1,25 @@
+===============================================================================
+  CONFIG COMPLETA - CLIENTE-CAJA-SEDE-CENTRAL
+  Banco 1 (anillo red-bancaria) - configuracion TinyCore LIVE (consola VNC 5905)
+===============================================================================
+
+>>> Nodo: qemu linux-tinycore-caja-sede-ssh.img (TinyCore Linux)
+>>> IP REAL confirmada (tabla ARP Router-1): 172.16.10.4
+>>> Red: VLAN10 CAJA_SEDE 172.16.10.0/28 - gateway 172.16.10.1 (HSRP)
+>>> Servicio: openssh en bootlocal (acceso admin)
+
+########## /etc/resolv.conf (nameserver del Banco 1)
+nameserver 172.16.0.2
+>>> (persistencia via /opt/.filetool.lst + mydata.tgz, igual que caja-sucursal)
+
+########## /opt/bootlocal.sh  (patron estandar TinyCore del banco)
+#!/bin/sh
+modprobe ipv6
+sysctl -w net.ipv4.ip_forward=1
+sysctl -w net.ipv6.conf.all.forwarding=1
+ifconfig eth0 172.16.10.4 netmask 255.255.255.240
+route add default gw 172.16.10.1
+/usr/local/etc/init.d/openssh start
+
+>>> PENDIENTE DE CONFIRMACION: el bootlocal exacto no se extrae por VNC;
+>>> se usa el patron de caja-sucursal (unico shell accesible) + IP de ARP.

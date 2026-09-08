@@ -1,0 +1,345 @@
+===============================================================================
+  CONFIG COMPLETA - FIREWALL-SEDE-CENTRAL (docker)
+  Banco 1 (anillo red-bancaria) - extraido del contenedor GNS3 via docker exec
+===============================================================================
+
+>>> Rol: filtrado de seguridad. El NAT/failover del anillo vive en Router-salida.
+>>> El Cmd del contenedor (heredoc sh) ES la config de arranque completa.
+>>> Persistencia: el Cmd vive en el contenedor; respaldo en
+>>>   project-files/docker/19e41051-e264-458d-99f2-96149755e9e7/startup_cmd.sh
+>>> y startup_cmd.json (regenerado con las rutas de retorno DNS).
+
+########## 1) CMD / HEREDOC DE ARRANQUE (config de fabrica del contenedor)
+
+# ================= FIREWALL v6 = SOLO SEGURIDAD =================
+# Rol: filtrado. El direccionamiento IP/NAT/failover del anillo vive en Router-salida.
+# eth0 -> Router-1 (LAN), eth1 -> Router-2 (LAN), eth2 -> Router-salida (10.10.2.0/30)
+
+ip addr del 10.0.0.1/30 dev eth2 2>/dev/null || true
+ip addr del 10.0.0.18/30 dev eth2 2>/dev/null || true
+ip addr del 10.0.0.18/30 dev eth3 2>/dev/null || true
+ip route del 10.0.0.0/30 2>/dev/null || true
+ip route del 10.0.0.16/30 dev eth2 2>/dev/null || true
+ip route del 10.0.0.16/30 dev eth3 2>/dev/null || true
+# 1. Interfaces up
+ip link set eth0 up
+ip link set eth1 up
+ip link set eth2 up
+
+# 2. IP addresses
+ip addr add 172.16.0.2/30 dev eth0 2>/dev/null
+ip addr add 172.16.1.2/30 dev eth1 2>/dev/null
+ip addr add 10.10.2.2/30 dev eth2 2>/dev/null
+
+# 3. Packages (iptables precocido en imagen; asegurar el resto)
+apk add --no-cache iptables socat dnsmasq iproute2 >/dev/null 2>&1
+
+# 4. Kernel tuning
+sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 >/dev/null
+sysctl -w net.ipv4.ip_forward=1 >/dev/null
+
+# 5. Rutas: default hacia Router-salida
+ip route add default via 10.10.2.1 2>/dev/null
+ip route add 172.16.0.0/16 via 172.16.0.1 dev eth0 2>/dev/null
+ip route add 172.16.0.0/16 via 172.16.1.1 dev eth1 metric 20 2>/dev/null
+
+# 6. Firewall base (policies DROP)
+iptables -F
+iptables -t nat -F
+iptables -t raw -F
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT ACCEPT
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# 7. ICMP (monitoreo)
+iptables -A INPUT -i eth0 -p icmp -j ACCEPT
+iptables -A INPUT -i eth1 -p icmp -j ACCEPT
+iptables -A INPUT -i eth2 -p icmp -j ACCEPT
+
+# 8. DNS (port 53) - Control de dominios
+iptables -A INPUT -i eth0 -p udp --dport 53 -j ACCEPT
+iptables -A INPUT -i eth0 -p tcp --dport 53 -j ACCEPT
+iptables -A INPUT -i eth1 -p udp --dport 53 -j ACCEPT
+iptables -A INPUT -i eth1 -p tcp --dport 53 -j ACCEPT
+iptables -t nat -A PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 53
+iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 53 -j REDIRECT --to-ports 53
+iptables -t nat -A PREROUTING -i eth1 -p udp --dport 53 -j REDIRECT --to-ports 53
+iptables -t nat -A PREROUTING -i eth1 -p tcp --dport 53 -j REDIRECT --to-ports 53
+
+# 9. INTERBANCARIO: entra por eth2 (Router-salida). Solo 80/8080 hacia servicios.
+# B2 (.2/.5) y B5 (.17) -> 8080 (archivos); B3 (.6/.9) y B4 (.13) -> 80 (transacciones)
+iptables -A FORWARD -i eth2 -s 10.0.0.0/24 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+iptables -A FORWARD -i eth2 -s 10.0.0.0/24 -j DROP
+
+# raw: prohibir 8080 para B3/B4 (solo 80)
+iptables -t raw -I PREROUTING -i eth2 -s 10.0.0.6 -p tcp --dport 8080 -j DROP
+iptables -t raw -I PREROUTING -i eth2 -s 10.0.0.9 -p tcp --dport 8080 -j DROP
+iptables -t raw -I PREROUTING -i eth2 -s 10.0.0.13 -p tcp --dport 8080 -j DROP
+iptables -t raw -I PREROUTING -i eth2 -s 10.0.0.14 -p tcp --dport 8080 -j DROP
+
+# INPUT servicios locales desde LAN (socat 80/8080)
+iptables -A INPUT -i eth0 -s 10.0.0.0/24 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+iptables -A INPUT -i eth1 -s 10.0.0.0/24 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+iptables -A INPUT -i eth0 -s 172.16.0.0/16 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+iptables -A INPUT -i eth1 -s 172.16.0.0/16 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+
+# 10. LAN -> router (internet / anillo). El router hace NAT.
+iptables -A FORWARD -i eth0 -o eth2 -j ACCEPT
+iptables -A FORWARD -i eth1 -o eth2 -j ACCEPT
+
+# 11. LAN -> LAN servicios
+iptables -A FORWARD -i eth0 -o eth0 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+iptables -A FORWARD -i eth1 -o eth1 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+
+# 12. DNAT anillo/LAN -> servicios
+iptables -t nat -A PREROUTING -i eth2 -p tcp --dport 8080 -j DNAT --to-destination 172.16.30.6:8080
+iptables -t nat -A PREROUTING -i eth2 -p tcp --dport 80 -j DNAT --to-destination 172.16.30.5:80
+iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 80 -j DNAT --to-destination 172.16.30.5:80
+iptables -t nat -A PREROUTING -i eth1 -p tcp --dport 80 -j DNAT --to-destination 172.16.30.5:80
+
+# 13. SOCAT proxies locales (servicios en IPs del firewall)
+socat TCP-LISTEN:80,bind=172.16.0.2,reuseaddr,fork TCP:172.16.30.5:80 &
+socat TCP-LISTEN:80,bind=172.16.1.2,reuseaddr,fork TCP:172.16.30.5:80 &
+socat TCP-LISTEN:8080,bind=0.0.0.0,reuseaddr,fork TCP:172.16.30.6:8080 &
+
+# 14. DNSMASQ (Control dominios)
+cat > /etc/dnsmasq.conf << "EOF"
+listen-address=127.0.0.1,172.16.0.2,172.16.1.2
+bind-interfaces
+no-resolv
+server=8.8.8.8
+server=1.1.1.1
+address=/facebook.com/127.0.0.1
+address=/www.facebook.com/127.0.0.1
+address=/tiktok.com/127.0.0.1
+address=/www.tiktok.com/127.0.0.1
+address=/instagram.com/127.0.0.1
+address=/www.instagram.com/127.0.0.1
+address=/dominio.com/127.0.0.1
+address=/www.dominio.com/127.0.0.1
+address=/facebook.com/::1
+address=/www.facebook.com/::1
+address=/tiktok.com/::1
+address=/www.tiktok.com/::1
+address=/instagram.com/::1
+address=/www.instagram.com/::1
+address=/dominio.com/::1
+address=/www.dominio.com/::1
+log-queries
+log-facility=/var/log/dnsmasq.log
+cache-size=1000
+EOF
+dnsmasq --test >/dev/null 2>&1 && dnsmasq
+
+# 15. shell interactivo
+exec /bin/sh
+
+########## 2) IPTABLES-SAVE (reglas VIVAS del contenedor ahora)
+########## (el docker usa nf_tables; coincide con el heredoc)
+
+# Generated by iptables-save v1.8.13 (nf_tables) on Sat Sep 12 09:29:50 2026
+*raw
+:PREROUTING ACCEPT [23985:5731581]
+:OUTPUT ACCEPT [0:0]
+-A PREROUTING -s 10.0.0.14/32 -i eth2 -p tcp -m tcp --dport 8080 -j DROP
+-A PREROUTING -s 10.0.0.13/32 -i eth2 -p tcp -m tcp --dport 8080 -j DROP
+-A PREROUTING -s 10.0.0.9/32 -i eth2 -p tcp -m tcp --dport 8080 -j DROP
+-A PREROUTING -s 10.0.0.6/32 -i eth2 -p tcp -m tcp --dport 8080 -j DROP
+COMMIT
+# Completed on Sat Sep 12 09:29:50 2026
+# Generated by iptables-save v1.8.13 (nf_tables) on Sat Sep 12 09:29:50 2026
+*filter
+:INPUT DROP [24:7480]
+:FORWARD DROP [25:2020]
+:OUTPUT ACCEPT [28412:2601717]
+-A INPUT -i lo -j ACCEPT
+-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i eth0 -p icmp -j ACCEPT
+-A INPUT -i eth1 -p icmp -j ACCEPT
+-A INPUT -i eth2 -p icmp -j ACCEPT
+-A INPUT -i eth0 -p udp -m udp --dport 53 -j ACCEPT
+-A INPUT -i eth0 -p tcp -m tcp --dport 53 -j ACCEPT
+-A INPUT -i eth1 -p udp -m udp --dport 53 -j ACCEPT
+-A INPUT -i eth1 -p tcp -m tcp --dport 53 -j ACCEPT
+-A INPUT -s 10.0.0.0/24 -i eth0 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+-A INPUT -s 10.0.0.0/24 -i eth1 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+-A INPUT -s 172.16.0.0/16 -i eth0 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+-A INPUT -s 172.16.0.0/16 -i eth1 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+-A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+-A FORWARD -s 10.0.0.0/24 -i eth2 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+-A FORWARD -s 10.0.0.0/24 -i eth2 -j DROP
+-A FORWARD -i eth0 -o eth2 -j ACCEPT
+-A FORWARD -i eth1 -o eth2 -j ACCEPT
+-A FORWARD -i eth0 -o eth0 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+-A FORWARD -i eth1 -o eth1 -p tcp -m multiport --dports 80,8080 -j ACCEPT
+COMMIT
+# Completed on Sat Sep 12 09:29:50 2026
+# Generated by iptables-save v1.8.13 (nf_tables) on Sat Sep 12 09:29:50 2026
+*nat
+:PREROUTING ACCEPT [98:12872]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+-A PREROUTING -i eth0 -p udp -m udp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth0 -p tcp -m tcp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth1 -p udp -m udp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth1 -p tcp -m tcp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth2 -p tcp -m tcp --dport 8080 -j DNAT --to-destination 172.16.30.6:8080
+-A PREROUTING -i eth2 -p tcp -m tcp --dport 80 -j DNAT --to-destination 172.16.30.5:80
+-A PREROUTING -i eth0 -p tcp -m tcp --dport 80 -j DNAT --to-destination 172.16.30.5:80
+-A PREROUTING -i eth1 -p tcp -m tcp --dport 80 -j DNAT --to-destination 172.16.30.5:80
+COMMIT
+# Completed on Sat Sep 12 09:29:50 2026
+# Generated by iptables-save v1.8.13 (nf_tables) on Sat Sep 12 09:29:50 2026
+*nat
+:PREROUTING ACCEPT [98:12872]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+-A PREROUTING -i eth0 -p udp -m udp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth0 -p tcp -m tcp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth1 -p udp -m udp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth1 -p tcp -m tcp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth2 -p tcp -m tcp --dport 8080 -j DNAT --to-destination 172.16.30.6:8080
+-A PREROUTING -i eth2 -p tcp -m tcp --dport 80 -j DNAT --to-destination 172.16.30.5:80
+-A PREROUTING -i eth0 -p tcp -m tcp --dport 80 -j DNAT --to-destination 172.16.30.5:80
+-A PREROUTING -i eth1 -p tcp -m tcp --dport 80 -j DNAT --to-destination 172.16.30.5:80
+COMMIT
+# Completed on Sat Sep 12 09:29:50 2026
+# Generated by iptables-save v1.8.13 (nf_tables) on Sat Sep 12 09:29:50 2026
+*raw
+:PREROUTING ACCEPT [23985:5731581]
+:OUTPUT ACCEPT [0:0]
+-A PREROUTING -s 10.0.0.14/32 -i eth2 -p tcp -m tcp --dport 8080 -j DROP
+-A PREROUTING -s 10.0.0.13/32 -i eth2 -p tcp -m tcp --dport 8080 -j DROP
+-A PREROUTING -s 10.0.0.9/32 -i eth2 -p tcp -m tcp --dport 8080 -j DROP
+-A PREROUTING -s 10.0.0.6/32 -i eth2 -p tcp -m tcp --dport 8080 -j DROP
+COMMIT
+# Completed on Sat Sep 12 09:29:50 2026
+
+########## 3) /etc/dnsmasq.conf (BLACKLIST DNS)
+########## dominios bloqueados--> 127.0.0.1 y ::1:
+########## facebook.com, www.facebook.com, tiktok.com, www.tiktok.com,
+########## instagram.com, www.instagram.com, dominio.com, www.dominio.com
+
+listen-address=127.0.0.1,172.16.0.2,172.16.1.2
+bind-interfaces
+no-resolv
+server=8.8.8.8
+server=1.1.1.1
+address=/facebook.com/127.0.0.1
+address=/www.facebook.com/127.0.0.1
+address=/tiktok.com/127.0.0.1
+address=/www.tiktok.com/127.0.0.1
+address=/instagram.com/127.0.0.1
+address=/www.instagram.com/127.0.0.1
+address=/dominio.com/127.0.0.1
+address=/www.dominio.com/127.0.0.1
+address=/facebook.com/::1
+address=/www.facebook.com/::1
+address=/tiktok.com/::1
+address=/www.tiktok.com/::1
+address=/instagram.com/::1
+address=/www.instagram.com/::1
+address=/dominio.com/::1
+address=/www.dominio.com/::1
+log-queries
+log-facility=/var/log/dnsmasq.log
+cache-size=1000
+
+########## 4) ip route actual (incluye rutas de retorno DNS 10.10.0.0/30 y 10.10.1.0/30)
+
+default via 10.10.2.1 dev eth2 
+10.10.0.0/30 via 172.16.0.1 dev eth0 
+10.10.1.0/30 via 172.16.1.1 dev eth1 
+10.10.2.0/30 dev eth2 scope link  src 10.10.2.2 
+172.16.0.0/30 dev eth0 scope link  src 172.16.0.2 
+172.16.0.0/16 via 172.16.0.1 dev eth0 
+172.16.0.0/16 via 172.16.1.1 dev eth1  metric 20 
+172.16.1.0/30 dev eth1 scope link  src 172.16.1.2 
+
+########## 5) procesos socat/dnsmasq
+
+PID   USER     TIME  COMMAND
+    1 root      0:00 /bin/sh
+   42 root      0:00 /gns3/bin/busybox sh -c while true; do TERM=vt100 /gns3/bin/busybox sh; done
+   48 root      0:00 /gns3/bin/busybox sh
+  154 root      0:00 socat TCP-LISTEN:80,bind=172.16.0.2,reuseaddr,fork TCP:172.16.30.5:80
+  155 root      0:00 socat TCP-LISTEN:80,bind=172.16.1.2,reuseaddr,fork TCP:172.16.30.5:80
+  156 root      0:00 socat TCP-LISTEN:8080,bind=0.0.0.0,reuseaddr,fork TCP:172.16.30.6:8080
+  161 dnsmasq   0:00 dnsmasq
+
+########## 6) /opt/failover.sh (script de failover del anillo - v5 legacy con eth3,
+########## NO ejecutandose actualmente; el nodo solo tiene eth0/eth1/eth2)
+
+#!/bin/sh
+# failover anillo v5 por reachability del ENLACE DIRECTO de cada vecino.
+# Al caer el vecino se borran TODAS las rutas con nexthop hacia el (metric10 y metric20),
+# para evitar ECMP/parpadeo hacia el enlace muerto. El vecino directo se desvia con /32
+# por la otra punta. En up se restauran primarias (m10) y las metric20 simetricas.
+s3=up
+s2=up
+
+clean_eth3() {
+  for s in 10.0.0.4/30 10.0.0.8/30 10.0.0.12/30; do ip route del $s via 10.0.0.2 dev eth3 2>/dev/null; done
+  ip route del 10.0.0.12/30 via 10.0.0.2 dev eth3 metric 20 2>/dev/null
+  ip route del 10.0.0.16/30 via 10.0.0.2 dev eth3 metric 20 2>/dev/null
+}
+restore_eth3() {
+  for s in 10.0.0.4/30 10.0.0.8/30 10.0.0.12/30; do ip route add $s via 10.0.0.2 dev eth3 metric 10 2>/dev/null; done
+  ip route add 10.0.0.12/30 via 10.0.0.2 dev eth3 metric 20 2>/dev/null
+  ip route add 10.0.0.16/30 via 10.0.0.2 dev eth3 metric 20 2>/dev/null
+}
+clean_eth2() {
+  for s in 10.0.0.0/30 10.0.0.4/30 10.0.0.8/30 10.0.0.12/30; do ip route del $s via 10.0.0.17 dev eth2 2>/dev/null; done
+}
+restore_eth2() {
+  for s in 10.0.0.0/30 10.0.0.4/30 10.0.0.8/30 10.0.0.12/30; do ip route add $s via 10.0.0.17 dev eth2 metric 20 2>/dev/null; done
+}
+
+while :; do
+  # --- lado eth3 / Banco 2 (10.0.0.2) ---
+  if [ "$s3" = "up" ]; then
+    if ping -c1 -W2 -I eth3 10.0.0.2 >/dev/null 2>&1; then
+      restore_eth3
+    else
+      clean_eth3
+      ip route replace 10.0.0.2/32 via 10.0.0.17 dev eth2 metric 5 2>/dev/null
+      s3=down
+    fi
+  else
+    ip route del 10.0.0.2/32 2>/dev/null
+    sleep 1
+    if ping -c1 -W2 -I eth3 10.0.0.2 >/dev/null 2>&1; then
+      restore_eth3
+      s3=up
+    else
+      clean_eth3
+      ip route replace 10.0.0.2/32 via 10.0.0.17 dev eth2 metric 5 2>/dev/null
+    fi
+  fi
+  # --- lado eth2 / Banco 5 (10.0.0.17) ---
+  if [ "$s2" = "up" ]; then
+    if ping -c1 -W2 -I eth2 10.0.0.17 >/dev/null 2>&1; then
+      restore_eth2
+    else
+      clean_eth2
+      ip route replace 10.0.0.17/32 via 10.0.0.2 dev eth3 metric 5 2>/dev/null
+      s2=down
+    fi
+  else
+    ip route del 10.0.0.17/32 2>/dev/null
+    sleep 1
+    if ping -c1 -W2 -I eth2 10.0.0.17 >/dev/null 2>&1; then
+      restore_eth2
+      s2=up
+    else
+      clean_eth2
+      ip route replace 10.0.0.17/32 via 10.0.0.2 dev eth3 metric 5 2>/dev/null
+    fi
+  fi
+  sleep 2
+done

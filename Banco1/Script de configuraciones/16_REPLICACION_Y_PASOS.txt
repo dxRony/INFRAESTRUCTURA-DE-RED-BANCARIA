@@ -1,0 +1,176 @@
+===============================================================================
+  GUIA DE REPLICACION - COMO RECONSTRUIR EL BANCO 1 DESDE CERO
+  (orden de configuracion manual de cada dispositivo)
+===============================================================================
+  Base: GNS3, proyecto "Proyecto_1" (red-bancaria). Nodos por consolas telnet.
+  Secretos de enable: usa el que aparece en cada running-config (07/08/09).
+  Contraseñas LAN: gns3/gns3 (TinyCore). Admin: admin/admin123 en DB.
+
+-------------------------------------------------------------------------------
+ PASO 0 - CREAR LA TOPOLOGIA (GNS3)
+-------------------------------------------------------------------------------
+ 1. Crear proyecto nuevo. Agregar:
+    - 4 x Router IOSv (vios-adventerprisek9-m.spa.159-3.m9.qcow2)
+        Router-1, Router-2, Router-sucursal-1, Router-salida
+    - 2 x Switch L2 IOSv (vios_l2-...-152-4.0.55.E)
+        Switch-sede-central, Switch-sucursal-1
+    - 2 x Docker: Firewall-sede-central (imagen firewall-sede-central),
+        Servidor-archivos3 (imagen servidor-archivos:1.0)
+    - 4 x TinyCore: caja-suc (caja-suc-firefox.img), caja-sede
+        (caja-sede-ssh.img), admin-suc (admin-suc-firefox.img),
+        admin-sede (linux-6.4-firefox-33.1.1-2.img)
+    - 3 x cloud (Banco2, Cloud1) + 1 NAT si se necesita Internet
+ 2. Conectar los enlaces (ver 00_TOPOLOGIA.txt):
+    Router-1 Gi0/0 .10/20/30 subIF <-> Switch-sede (trunk dot1Q 10,20,30)
+    Router-1 Gi0/1  <-> Router-sucursal Gi0/1   (10.10.0.0/30)
+    Router-1 Gi0/2  <-> Firewall eth0           (172.16.0.0/30)
+    Router-2 Gi0/0 .10/20/30 subIF <-> Switch-sede trunk
+    Router-2 Gi0/1  <-> Router-sucursal Gi0/2   (10.10.1.0/30)
+    Router-2 Gi0/2  <-> Firewall eth1           (172.16.1.0/30)
+    Firewall eth2  <-> Router-salida            (10.10.2.0/30)
+    Switch-sede: Gi0/1 caja-sede, Gi0/2 admin-sede, Gi0/0 servidores, Gi0/3 servers
+    Switch-suc: Gi0/2 caja-suc, Gi0/1 admin-suc (VLAN40/50)
+
+-------------------------------------------------------------------------------
+ PASO 1 - SWITCHES (capa 2)
+-------------------------------------------------------------------------------
+  switch-sede-central:
+    vlan 10 / name CAJA_SEDE
+    vlan 20 / name ADMIN_SEDE
+    vlan 30 / name SERVIDORES_SEDE
+    int Gi0/1 -> switchport access vlan 10
+    int Gi0/2 -> switchport access vlan 20
+    int Gi0/0, Gi0/3 -> switchport access vlan 30
+    int Gi1/2 -> access vlan 30 (si se usa)
+    int Gi1/3, Gi2/0..  -> default vlan 1
+    TRUNK hacia routers: Gig0/<trunk> switchport mode trunk
+        switchport trunk allowed vlan 10,20,30
+    interface Vlan20: ip address 172.16.20.10 255.255.255.0 (mgmt)
+  switch-sucursal-1:
+    vlan 40 / name CAJA_SUCURSAL ; vlan 50 / name ADMIN_SUCURSAL
+    int Gi0/2 -> access vlan 40 (caja-suc)
+    int Gi0/1 -> access vlan 50 (admin-suc)
+    interface Vlan50: ip address 172.16.50.10 255.255.255.0 (mgmt)
+
+-------------------------------------------------------------------------------
+ PASO 2 - ROUTER-1-SEDE-CENTRAL (activo principal)
+-------------------------------------------------------------------------------
+  Los comandos aqui son el contenido exacto del archivo 01_Router-1-sede-central.txt.
+  Destacados:
+    int Gi0/0.10 ; encapsulation dot1Q 10 ; ip addr 172.16.10.2/28
+        ip access-group ACL_CAJA_SEDE in ; CAJA_OUT out
+        standby 10 ip 172.16.10.1 ; standby 10 priority 110 ; standby 10 preempt
+    int Gi0/0.20 ; encap 20 ; ip addr 172.16.20.2/24
+        ip access-group SSH-L3-SEDE out
+        standby 20 ip 172.16.20.1 ; prio 110 ; preempt
+    int Gi0/0.30 ; encap 30 ; ip addr 172.16.30.2/29
+        ip access-group ACL_SERVERS_SEDE in ; SERVERS_OUT out
+        standby 30 ip 172.16.30.1 ; prio 110 ; preempt
+    int Gi0/1: ip addr 10.10.0.1/30
+    int Gi0/2: ip addr 172.16.0.1/30
+    Rutas: (ver 15_ACLs_Rutas_NAT_referencia.txt)
+      ip route 10.0.0.0/30 172.16.0.2, 10.0.0.4/30, 10.0.0.8/30,
+              10.0.0.12/30, 10.0.0.16/30 (via 172.16.0.2)
+      ip route 10.10.1.0/30 172.16.10.3
+      ip route 172.16.40.0/28 10.10.0.2, 172.16.50.0/24 10.10.0.2
+      ip route 0.0.0.0/0 172.16.0.2 (default)
+    HSRP: standby 10 ip 172.16.10.1 prio 110 preempt
+          standby 20 ip 172.16.20.1 prio 110 preempt
+          standby 30 ip 172.16.30.1 prio 110 preempt
+    write memory
+
+-------------------------------------------------------------------------------
+ PASO 3 - ROUTER-2-SEDE-CENTRAL (backup)
+-------------------------------------------------------------------------------
+  Mismas subinterfaces / ACLs que R1, pero:
+    Gi0/0.10/20/30 con las IP .3 (172.16.10.3, 172.16.20.3, 172.16.30.3)
+    Gi0/1: ip addr 10.10.1.1/30 ; Gi0/2: ip addr 172.16.1.1/30
+    standby 10/20/30 ip 172.16.10.1/172.16.20.1/172.16.30.1
+       priority 90, preempt (backup)
+    ip route 10.0.0.0/30 172.16.1.2
+    write memory
+
+-------------------------------------------------------------------------------
+ PASO 4 - ROUTER-SUCURSAL-1 (gateway sucursal + PAT)
+-------------------------------------------------------------------------------
+    int Gi0/0.40 ; encap 40 ; ip addr 172.16.40.1/28
+    int Gi0/0.50 ; encap 50 ; ip addr 172.16.50.1/24
+    int Gi0/1: ip addr 10.10.0.2/30
+    int Gi0/2: ip addr 10.10.1.2/30
+    access-list 105 permit ip 172.16.40.0 0.0.0.15 any
+    access-list 105 permit ip 172.16.50.0 0.0.0.255 any
+    ip nat inside source list 105 interface Gi0/1 overload
+    (CONFIRMADO: Gi0/0.40 y Gi0/0.50 = ip nat inside ; Gi0/1 y Gi0/2 = ip nat outside)
+    Rutas:
+      ip route 0.0.0.0/0 10.10.0.1 10       (preferida)
+      ip route 0.0.0.0/0 10.10.1.1 20       (backup)
+      ip route 172.16.0.0/30 10.10.0.1 ; 172.16.1.0/30 10.10.0.1
+      ip route 172.16.10.0/28 10.10.0.1 ; 172.16.20.0/24 10.10.0.1
+      ip route 172.16.30.0/29 10.10.0.1
+    ACL SSH-L3-SUC / SSH-ADMIN (mira 03_ y 15_)
+    write memory
+
+-------------------------------------------------------------------------------
+ PASO 5 - ROUTER-SALIDA
+-------------------------------------------------------------------------------
+  PENDIENTE DE CONFIRMACION: sin config actual. (00_/04_/15_ marcan estado.)
+
+-------------------------------------------------------------------------------
+ PASO 6 - FIREWALL-SEDE-CENTRAL (docker)
+-------------------------------------------------------------------------------
+  Config = Cmd del contenedor (archivo 07_Firewall-sede-central.txt seccion 1).
+  En GNS3 el nodo docker se monta con ese Cmd; respuesta replicable:
+    - Interfaces: eth0 172.16.0.2/30, eth1 172.16.1.2/30, eth2 10.10.2.2/30
+    - Rutas vivas:
+        default via 10.10.2.1 (Router-salida)
+        172.16.0.0/16 via 172.16.0.1 (R1) y via 172.16.1.1 (R2) metric 20
+        + RETORNO DNS agregado: 10.10.0.0/30 via 172.16.0.1 dev eth0
+          y 10.10.1.0/30 via 172.16.1.1 dev eth1
+    - iptables: policies DROP; DNS REDIRECT 53 en eth0/eth1;
+      DNAT 80->172.16.30.5, 8080->172.16.30.6; raw bloqueo B3/B4.
+    - dnsmasq BLACKLIST (ver seccion 3 del 07_): facebook.com, tiktok.com,
+      instagram.com, dominio.com (www. incluidos) --> 127.0.0.1 y ::1
+    - socat: 172.16.0.2:80->172.16.30.5:80 ; 172.16.1.2:80->web ;
+      0.0.0.0:8080->172.16.30.6:8080
+  IMPORTANTE para persistencia: en docker GNS3 el Cmd SI aplica (startup_command
+  en API =0; la config real la guarda el contenedor). Backupear
+  project-files/docker/19e41051-.../startup_cmd.sh.
+
+-------------------------------------------------------------------------------
+ PASO 7 - SERVIDORES
+-------------------------------------------------------------------------------
+  servidor-archivos3 (docker):
+    volver a montar con Cmd = entrypoint.sh:
+      ip link set eth0 up; ip addr 172.16.30.6/29 dev eth0
+      ip route add default via 172.16.30.1
+      exec python3 /usr/local/bin/archivos_server.py   (puerto 8080)
+    datos en /data (informes + listas_negras/clientes.txt) [08_]
+  servidor-web (TinyCore 5029):
+    linux-tinycore-11.1.qcow2. Sin shell. Sirve portal en :80 y
+    POST /interbancaria. Config en 09_. Su bootlocal si se necesita
+    replicar queda PENDIENTE (imagen no extraible via debugfs).
+  servidor-sede-central (TinyCore 5025):
+    bootlocal: ifconfig 172.16.30.4/29, route default gw 172.16.30.1,
+    openssh start, python db_server.py (home/tc). Config en 10_.
+
+-------------------------------------------------------------------------------
+ PASO 8 - CLIENTES TINYCORE (escritorios)
+-------------------------------------------------------------------------------
+  Cada uno: bootlocal con su IP fija + gateway + openssh (patron 11_/14_).
+  resolv.conf nameserver 172.16.0.2 (patron + persistencia con filetool).
+  Confirmado solo en caja-sucursal (5023); los demas PENDIENTE DE CONFIRMACION
+  (VNC, mismo patron).
+
+-------------------------------------------------------------------------------
+ PASO 9 - INTERBANCARIO ANILLO (estar TOPOLOGIA)
+-------------------------------------------------------------------------------
+  10.0.0.0/30 = B2, 10.0.0.4/30 = B3, 10.0.0.8/30 = B4, 10.0.0.12/30,
+  10.0.0.16/30 = B5. RFC red-bancaria coordina esos tramos.
+  Las rutas estaticas que banclo1 expone van por FW (eth0/eth1) hacia R1/R2.
+  Failover anillo: 07_ seccion 6 (script legacy eth3 no activo) y los track/sla
+  que cada router use (en el running-config).
+
+-------------------------------------------------------------------------------
+ NOTA: DNS funciona desde la sucursal porque el FW NATea la consulta hacia
+  el nameserver 172.16.0.2; sin las rutas de retorno 10.10.0.0/30 y
+  10.10.1.0/30 (agregadas) la repetida no llega. No olvides agregarlas.

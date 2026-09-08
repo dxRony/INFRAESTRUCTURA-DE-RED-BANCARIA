@@ -1,0 +1,213 @@
+===============================================================================
+  CONFIG COMPLETA - SERVIDOR-ARCHIVOS3 (docker 'servidor-archivos:1.0')
+  Banco 1 (anillo red-bancaria) - extraido del contenedor via docker exec
+===============================================================================
+
+>>> Servicio: API REST de archivos (informes + lista negra de clientes)
+>>> IP docker: 172.16.30.6/29  gw 172.16.30.1  (conectado a VLAN30 sede)
+>>> Puerto: TCP 8080 (todos los binds + DNAT del FW 172.16.30.6:8080)
+>>> Volumen GNS3: project-files/docker/978acb7e-.../ (data/informes, data/listas_negras)
+
+########## 1) entrypoint.sh (config de red y arranque del servicio)
+#!/bin/sh
+ip link set eth0 up 2>/dev/null
+ip addr add 172.16.30.6/29 dev eth0 2>/dev/null
+ip route add default via 172.16.30.1 2>/dev/null
+mkdir -p /data/informes /data/listas_negras
+exec python3 /usr/local/bin/archivos_server.py
+
+########## 2) archivos_server.py (servicio completo)
+#!/usr/bin/env python3
+import json
+import os
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+DATA = "/data"
+HOST = "0.0.0.0"
+PORT = 8080
+INFORMES = os.path.join(DATA, "informes")
+LISTAS = os.path.join(DATA, "listas_negras")
+BLACKLIST = os.path.join(LISTAS, "clientes.txt")
+
+
+def _read_lines(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return [ln.strip() for ln in f if ln.strip()]
+    except FileNotFoundError:
+        return []
+
+
+def _write_lines(path, lines):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def _list_dir(path):
+    try:
+        names = sorted(os.listdir(path))
+    except FileNotFoundError:
+        return []
+    return [
+        {"nombre": n, "tamano": os.path.getsize(os.path.join(path, n))}
+        for n in names
+        if os.path.isfile(os.path.join(path, n))
+    ]
+
+
+class Handler(BaseHTTPRequestHandler):
+    def _send(self, code, body, content_type="application/json"):
+        if isinstance(body, (dict, list)):
+            body = json.dumps(body, ensure_ascii=False)
+        data = body.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Server", "Servidor-archivos-Banco1")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _bad(self):
+        self._send(404, {"error": "ruta no encontrada"})
+
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip("/") or "/"
+
+        if path == "/":
+            return self._send(200, {
+                "servicio": "Servidor de archivos Banco 1",
+                "endpoints": {
+                    "GET /api/blacklist": "lista negra de clientes",
+                    "GET /api/informes": "lista de informes disponibles",
+                    "GET /files/informes/<nombre>": "descarga un informe",
+                    "GET /files/listas_negras/<nombre>": "descarga una lista negra",
+                    "POST /api/blacklist": "agrega un cliente a la lista negra",
+                },
+                "ip": "172.16.30.6",
+            })
+
+        if path == "/api/blacklist":
+            return self._send(200, {
+                "lista_negra_clientes": _read_lines(BLACKLIST),
+                "total": len(_read_lines(BLACKLIST)),
+            })
+
+        if path == "/api/informes":
+            return self._send(200, {
+                "informes": _list_dir(INFORMES),
+            })
+
+        if path.startswith("/files/"):
+            rel = path[len("/files/"):]
+            safe = os.path.normpath(rel)
+            if safe.startswith(".."):
+                return self._bad()
+            full = os.path.join(DATA, safe)
+            if not os.path.isfile(full):
+                return self._bad()
+            data = open(full, "rb").read()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Server", "Servidor-archivos-Banco1")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
+        self._bad()
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip("/")
+
+        if path == "/api/blacklist":
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length).decode("utf-8", "replace") if length else ""
+            try:
+                payload = json.loads(raw) if raw.strip() else {}
+                cliente = str(payload.get("cliente", "")).strip()
+            except (json.JSONDecodeError, ValueError):
+                cliente = ""
+            if not cliente:
+                return self._send(400, {
+                    "estado": "rechazado",
+                    "codigo": "DATOS_INVALIDOS",
+                    "mensaje": "falta el campo 'cliente' (JSON)",
+                })
+            actuales = _read_lines(BLACKLIST)
+            if cliente.lower() not in [c.lower() for c in actuales]:
+                actuales.append(cliente)
+                _write_lines(BLACKLIST, actuales)
+            return self._send(200, {
+                "estado": "exito",
+                "codigo": "CLIENTE_AGREGADO",
+                "cliente": cliente,
+                "lista_negra_clientes": actuales,
+                "total": len(actuales),
+            })
+
+        self._bad()
+
+    def log_message(self, *args):
+        pass
+
+
+if __name__ == "__main__":
+    os.makedirs(INFORMES, exist_ok=True)
+    os.makedirs(LISTAS, exist_ok=True)
+    print(f"Servidor de archivos en {HOST}:{PORT} (datos en {DATA})")
+    HTTPServer((HOST, PORT), Handler).serve_forever()
+
+########## 3) /etc/network/interfaces (por defecto; red la setea entrypoint)
+#
+# This is a sample network config, please uncomment lines to configure the network
+#
+
+# Uncomment this line to load custom interface files
+# source /etc/network/interfaces.d/*
+
+# Static config for eth0
+#auto eth0
+#iface eth0 inet static
+#	address 192.168.0.2
+#	netmask 255.255.255.0
+#	gateway 192.168.0.1
+#	up echo nameserver 192.168.0.1 > /etc/resolv.conf
+
+# DHCP config for eth0
+#auto eth0
+#iface eth0 inet dhcp
+#	hostname Servidor-archivos3
+
+########## 4) interfaces vivas
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+    inet 127.0.0.1/8 scope host lo
+36: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UNKNOWN qlen 1000
+    inet 172.16.30.6/29 scope global eth0
+
+########## 5) /data (volumen del contenedor)
+/data/.gns3_perms
+/data/informes/informe_financiero_septiembre.txt
+/data/listas_negras/clientes.txt
+/data/listas_negras/README.txt
+
+########## 6) /data/listas_negras/clientes.txt (lista negra viva)
+JUAN PEREZ GARCIA
+MARIA LOPEZ RUIZ
+CARLOS MARTINEZ SANCHEZ
+ROSA FLORES TORRES
+ANA DIAZ VEGA
+PEDRO RAMIREZ MORA
+
+########## 7) /data/listas_negras/README.txt
+Lista negra de clientes del Banco 1.
+Formato: un cliente por linea. Editables en cualquier momento.
+
+########## 8) /data/informes/informe_financiero_septiembre.txt
+Informe financiero mensual - evidencia entregable Banco 1
+Fecha: 2026-09
+Resumen de operaciones y saldos de la banca minorista.

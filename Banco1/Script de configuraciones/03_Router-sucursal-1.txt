@@ -1,0 +1,252 @@
+===============================================================================
+  CONFIG COMPLETA - ROUTER-SUCURSAL-1
+  Banco 1 (anillo red-bancaria) - extraido via consola GNS3 5009
+===============================================================================
+
+>>> Este archivo es la config EXACTA (show running-config) + tablas extra.
+>>> Advertencia: los hashes enable secret/privilege NO son reales del laboratorio.
+
+########## RUNNING-CONFIG
+
+version 15.6
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+!
+hostname Router-sucursal-1
+!
+boot-start-marker
+boot-end-marker
+!
+!
+enable secret 5 $1$IhTR$AKGUf3Ier9VRbO7JyJ8nl0
+!
+no aaa new-model
+ethernet lmi ce
+!
+!
+!
+mmi polling-interval 60
+no mmi auto-configure
+no mmi pvc
+mmi snmp-timeout 180
+!
+!
+!
+!
+!
+no ip icmp rate-limit unreachable
+!
+!
+!
+!
+!
+!
+no ip domain lookup
+ip domain name banco1.local
+ip cef
+no ipv6 cef
+!
+multilink bundle-name authenticated
+!
+!
+!
+!
+username admin privilege 15 secret 5 $1$3wf5$SxMkhVaRtQ8HLpKba1JF0.
+!
+redundancy
+!
+no cdp log mismatch duplex
+!
+ip tcp synwait-time 5
+! 
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+interface GigabitEthernet0/0
+ no ip address
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/0.40
+ encapsulation dot1Q 40
+ ip address 172.16.40.1 255.255.255.240
+ ip access-group SSH-L3-SUC out
+ ip nat inside
+ ip virtual-reassembly in
+!
+interface GigabitEthernet0/0.50
+ encapsulation dot1Q 50
+ ip address 172.16.50.1 255.255.255.0
+ ip access-group SSH-L3-SUC out
+ ip nat inside
+ ip virtual-reassembly in
+!
+interface GigabitEthernet0/1
+ ip address 10.10.0.2 255.255.255.252
+ ip nat outside
+ ip virtual-reassembly in
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/2
+ ip address 10.10.1.2 255.255.255.252
+ ip nat outside
+ ip virtual-reassembly in
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/3
+ no ip address
+ shutdown
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/4
+ no ip address
+ shutdown
+ duplex auto
+ speed auto
+ media-type rj45
+!
+ip forward-protocol nd
+!
+!
+no ip http server
+no ip http secure-server
+ip nat inside source list 105 interface GigabitEthernet0/1 overload
+ip route 0.0.0.0 0.0.0.0 10.10.0.1 10
+ip route 0.0.0.0 0.0.0.0 10.10.1.1 20
+ip route 172.16.0.0 255.255.255.252 10.10.0.1
+ip route 172.16.1.0 255.255.255.252 10.10.0.1
+ip route 172.16.10.0 255.255.255.240 10.10.0.1 10
+ip route 172.16.10.0 255.255.255.240 10.10.1.1 20
+ip route 172.16.20.0 255.255.255.0 10.10.0.1 10
+ip route 172.16.20.0 255.255.255.0 10.10.1.1 20
+ip route 172.16.30.0 255.255.255.248 10.10.0.1 10
+ip route 172.16.30.0 255.255.255.248 10.10.1.1 20
+ip ssh version 2
+!
+ip access-list standard SSH-ADMIN
+ permit 172.16.50.3
+ permit 172.16.20.4
+ deny   any
+!
+ip access-list extended SSH-L3-SUC
+ permit tcp host 172.16.20.4 172.16.40.0 0.0.0.15 eq 22
+ permit tcp host 172.16.50.3 172.16.40.0 0.0.0.15 eq 22
+ permit tcp host 172.16.20.4 172.16.50.0 0.0.0.255 eq 22
+ permit tcp host 172.16.50.3 172.16.50.0 0.0.0.255 eq 22
+ deny   tcp any 172.16.40.0 0.0.0.15 eq 22
+ deny   tcp any 172.16.50.0 0.0.0.255 eq 22
+ permit ip any any
+!
+!
+!
+access-list 105 permit ip 172.16.40.0 0.0.0.15 any
+access-list 105 permit ip 172.16.50.0 0.0.0.255 any
+!
+control-plane
+!
+banner exec ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+banner incoming ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+banner login ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+!
+line con 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line aux 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line vty 0 4
+ access-class SSH-ADMIN in
+ login local
+ transport input ssh
+!
+no scheduler allocate
+!
+end
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       o - ODR, P - periodic downloaded static route, H - NHRP, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+Gateway of last resort is 10.10.0.1 to network 0.0.0.0
+S*    0.0.0.0/0 [10/0] via 10.10.0.1
+      10.0.0.0/8 is variably subnetted, 4 subnets, 2 masks
+C        10.10.0.0/30 is directly connected, GigabitEthernet0/1
+L        10.10.0.2/32 is directly connected, GigabitEthernet0/1
+C        10.10.1.0/30 is directly connected, GigabitEthernet0/2
+L        10.10.1.2/32 is directly connected, GigabitEthernet0/2
+      172.16.0.0/16 is variably subnetted, 9 subnets, 5 masks
+S        172.16.0.0/30 [1/0] via 10.10.0.1
+S        172.16.1.0/30 [1/0] via 10.10.0.1
+S        172.16.10.0/28 [10/0] via 10.10.0.1
+S        172.16.20.0/24 [10/0] via 10.10.0.1
+S        172.16.30.0/29 [10/0] via 10.10.0.1
+C        172.16.40.0/28 is directly connected, GigabitEthernet0/0.40
+L        172.16.40.1/32 is directly connected, GigabitEthernet0/0.40
+C        172.16.50.0/24 is directly connected, GigabitEthernet0/0.50
+L        172.16.50.1/32 is directly connected, GigabitEthernet0/0.50
+Total active translations: 0 (0 static, 0 dynamic; 0 extended)
+Peak translations: 8, occurred 08:28:19 ago
+Outside interfaces:
+  GigabitEthernet0/1, GigabitEthernet0/2
+Inside interfaces: 
+  GigabitEthernet0/0.40, GigabitEthernet0/0.50
+Hits: 1243  Misses: 0
+CEF Translated packets: 169, CEF Punted packets: 1074
+Expired translations: 289
+Dynamic mappings:
+-- Inside Source
+[Id: 1] access-list 105 interface GigabitEthernet0/1 refcount 0
+Total doors: 0
+Appl doors: 0
+Normal doors: 0
+Queued Packets: 0
+% Incomplete command.
+Router-sucursal-1#
+

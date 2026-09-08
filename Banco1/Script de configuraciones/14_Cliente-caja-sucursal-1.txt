@@ -1,0 +1,35 @@
+===============================================================================
+  CONFIG COMPLETA - CLIENTE-CAJA-SUCURSAL-1
+  Banco 1 (anillo red-bancaria) - configuracion TinyCore LIVE extraida via consola 5023
+===============================================================================
+
+>>> Nodo: qemu linux-tinycore-caja-suc-firefox.img (TinyCore, accesible telnet 5023)
+>>> IP REAL: 172.16.40.3 (confirmada en BOOTLOCAL del propio nodo + ARP)
+>>> Red: VLAN40 CAJA_SUCURSAL 172.16.40.0/28 - gateway 172.16.40.1
+>>> User: gns3/gns3  |  sudo sin password (root directo)
+
+########## /opt/bootlocal.sh  (CONFIRMADO, salida real del nodo) ##########
+#!/bin/sh
+# put other system startup commands here
+modprobe ipv6
+sysctl -w net.ipv4.ip_forward=1
+sysctl -w net.ipv6.conf.all.forwarding=1
+ifconfig eth0 172.16.40.3 netmask 255.255.255.240
+route add default gw 172.16.40.1
+# SSH server (openssh.tcz) para acceso de administracion
+/usr/local/etc/init.d/openssh start
+
+########## /etc/resolv.conf  (CONFIRMADO - NAMESERVER DEL BANCO 1) ##########
+nameserver 172.16.0.2
+
+########## PERSISTENCIA (CONFIRMADO - mydata.tgz actualizado 2026-09-12) ##########
+>>> /opt/.filetool.lst incluye: home, etc/inittab, etc/securetty,
+>>>   usr/local/share/X11/xorg.conf.d, etc/issue, etc/shadow, /etc/passwd,
+>>>   etc/resolv.conf  (nuevo - agregado en esta sesion)
+>>> Estados guardados con: sudo filetool.sh -b
+>>> Backups: /mnt/sda1/mydata.tgz + /mnt/sda1/tce/mydata.tgz
+>>> Perfil firefox: home/gns3/.mozilla/firefox/rq8su1zw.default/
+
+########## VALIDACION DNS (confirmada desde este cliente) ##########
+$ nslookup google.com 172.16.0.2     -> 142.250.176.78 (resuelve OK)
+$ nslookup facebook.com 172.16.0.2   -> ::1 / 127.0.0.1 (BLOQUEADO por blacklist)

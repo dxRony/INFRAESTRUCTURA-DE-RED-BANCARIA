@@ -1,0 +1,142 @@
+version 15.6
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+hostname Router-salida
+boot-start-marker
+boot-end-marker
+no aaa new-model
+ethernet lmi ce
+no process cpu autoprofile hog
+mmi polling-interval 60
+no mmi auto-configure
+no mmi pvc
+mmi snmp-timeout 180
+no ip icmp rate-limit unreachable
+no ip domain lookup
+ip cef
+no ipv6 cef
+multilink bundle-name authenticated
+redundancy
+no cdp log mismatch duplex
+no cdp run
+ip tcp synwait-time 5
+track 1 interface GigabitEthernet0/1 line-protocol
+track 2 interface GigabitEthernet0/2 line-protocol
+interface GigabitEthernet0/0
+ ip address dhcp
+ ip nat outside
+ ip virtual-reassembly in
+ duplex auto
+ speed auto
+ media-type rj45
+ no shutdown
+ no cdp enable
+interface GigabitEthernet0/1
+ ip address 10.0.0.1 255.255.255.252
+ ip nat outside
+ ip virtual-reassembly in
+ duplex auto
+ speed auto
+ media-type rj45
+ no shutdown
+ no cdp enable
+interface GigabitEthernet0/2
+ ip address 10.0.0.18 255.255.255.252
+ ip nat outside
+ ip virtual-reassembly in
+ duplex auto
+ speed auto
+ media-type rj45
+ no shutdown
+ no cdp enable
+interface GigabitEthernet0/3
+ ip address 10.10.2.1 255.255.255.252
+ ip nat inside
+ ip virtual-reassembly in
+ duplex auto
+ speed auto
+ media-type rj45
+ no shutdown
+ no cdp enable
+ip forward-protocol nd
+no ip http server
+no ip http secure-server
+ip nat inside source list 100 interface GigabitEthernet0/0 overload
+ip nat inside source list 101 interface GigabitEthernet0/1 overload
+ip nat inside source static tcp 172.16.30.5 80 interface GigabitEthernet0/1 80
+ip nat inside source static tcp 172.16.30.6 8080 10.0.0.1 8080 extendable
+ip nat inside source static tcp 172.16.30.6 8080 10.0.0.18 8080 extendable
+ip route 10.0.0.4 255.255.255.252 10.0.0.2 track 10
+ip route 10.0.0.8 255.255.255.252 10.0.0.2 track 10
+ip route 10.0.0.12 255.255.255.252 10.0.0.17 track 20
+ip route 10.0.0.12 255.255.255.252 10.0.0.2 20 track 1
+ip route 10.0.0.4 255.255.255.252 10.0.0.17 20 track 2
+ip route 10.0.0.8 255.255.255.252 10.0.0.17 20 track 2
+ip route 10.0.0.0 255.255.255.252 10.0.0.17 20 track 2
+ip route 0.0.0.0 0.0.0.0 192.168.122.1
+ip route 172.16.0.0 255.255.0.0 10.10.2.2
+access-list 100 permit ip 172.16.0.0 0.0.255.255 any
+access-list 100 permit ip 10.10.2.0 0.0.0.3 any
+access-list 101 permit ip 172.16.0.0 0.0.255.255 any
+ip access-list extended ACL-SLA-B2-B3
+ permit icmp host 10.0.0.1 host 10.0.0.6
+ip access-list extended ACL-SLA-B5-B4
+ permit icmp host 10.0.0.18 host 10.0.0.13
+route-map RM-LOCAL-SLA permit 10
+ match ip address ACL-SLA-B2-B3
+ set ip next-hop 10.0.0.2
+route-map RM-LOCAL-SLA permit 20
+ match ip address ACL-SLA-B5-B4
+ set ip next-hop 10.0.0.17
+ip local policy route-map RM-LOCAL-SLA
+control-plane
+ip sla 1
+ icmp-echo 10.0.0.2
+ frequency 5
+ip sla 2
+ icmp-echo 10.0.0.6 source-interface GigabitEthernet0/1
+ frequency 5
+ip sla 3
+ icmp-echo 10.0.0.10
+ frequency 5
+ip sla 4
+ icmp-echo 10.0.0.17
+ frequency 5
+ip sla 5
+ icmp-echo 10.0.0.13 source-interface GigabitEthernet0/2
+ frequency 5
+ip sla schedule 1 life forever start-time now
+ip sla schedule 2 life forever start-time now
+ip sla schedule 3 life forever start-time now
+ip sla schedule 4 life forever start-time now
+ip sla schedule 5 life forever start-time now
+track 3 ip sla 1 reachability
+ delay down 10 up 5
+track 4 ip sla 2 reachability
+ delay down 10 up 5
+track 5 ip sla 3 reachability
+ delay down 10 up 5
+track 6 ip sla 4 reachability
+ delay down 10 up 5
+track 7 ip sla 5 reachability
+ delay down 10 up 5
+track 10 ip sla 2 reachability
+ delay down 10 up 5
+track 20 ip sla 5 reachability
+ delay down 10 up 5
+event manager applet RING_SEG_B1-B2
+ event track 3 state any
+ action 1.0 syslog msg "RING SEG B1-B2 track=$_track_state"
+event manager applet RING_SEG_B2-B3
+ event track 4 state any
+ action 1.0 syslog msg "RING SEG B2-B3 track=$_track_state"
+event manager applet RING_SEG_B3-B4
+ event track 5 state any
+ action 1.0 syslog msg "RING SEG B3-B4 track=$_track_state"
+event manager applet RING_SEG_B1-B5
+ event track 6 state any
+ action 1.0 syslog msg "RING SEG B1-B5 track=$_track_state"
+event manager applet RING_SEG_B4-B5
+ event track 7 state any
+ action 1.0 syslog msg "RING SEG B4-B5 track=$_track_state"

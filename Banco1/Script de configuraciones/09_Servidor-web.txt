@@ -1,0 +1,225 @@
+===============================================================================
+  CONFIG COMPLETA - SERVIDOR-WEB
+  Banco 1 (anillo red-bancaria) - extraido via consola 5029 + HTTP
+===============================================================================
+
+>>> Nodo QEMU TinyCore linux-tinycore-11.1.qcow2 - SIN shell interactivo.
+>>> Servicio: Portal interno Banco1 (HTML en /) + API POST /interbancaria
+>>> Log de consola muestra: [WEB] "POST /interbancaria HTTP/1.1" 200 -
+>>> Direccion: 172.16.30.5:80 (VLAN30 servidores sede)
+>>> En el FW: DNAT 80 -> 172.16.30.5:80 + socat (172.16.0.2:80 / 172.16.1.2:80).
+
+########## 1) PORTAL INTERNO (GET /) - HTML servido (4852 bytes)
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Banco 1 - Portal Interno</title>
+    <style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: #eef1f5;
+    color: #1f2937;
+    padding: 30px 15px;
+}
+
+a { color: #2454a3; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.login-wrap {
+    width: 380px;
+    margin: 60px auto;
+    background: #ffffff;
+    border: 1px solid #d7dce3;
+    border-radius: 6px;
+    padding: 40px 36px;
+    box-shadow: 0 2px 10px rgba(30, 41, 59, 0.08);
+}
+
+.login-wrap h1 {
+    font-size: 20px;
+    color: #17233d;
+    text-align: center;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+}
+
+.login-wrap p.subtitle {
+    text-align: center;
+    color: #6b7280;
+    font-size: 12px;
+    margin-bottom: 26px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+label {
+    display: block;
+    font-size: 13px;
+    color: #374151;
+    margin-top: 14px;
+    margin-bottom: 4px;
+    font-weight: bold;
+}
+
+input[type=text], input[type=password], input[type=number], select {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid #c7cdd6;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #1f2937;
+    background: #fbfcfd;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: #2454a3;
+}
+
+button, input[type=submit] {
+    margin-top: 20px;
+    width: 100%;
+    padding: 10px;
+    background-color: #17233d;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+}
+
+button:hover, input[type=submit]:hover { background-color: #2454a3; }
+
+.btn-secondary {
+    background-color: #ffffff;
+    color: #17233d;
+    border: 1px solid #c7cdd6;
+}
+.btn-secondary:hover { background-color: #f1f4f8; }
+
+.msg {
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin-top: 16px;
+}
+.msg.ok  { background: #e4f5e9; color: #1c6b3a; border: 1px solid #bde6c9; }
+.msg.err { background: #fbe9e9; color: #9c2b2b; border: 1px solid #f2c2c2; }
+
+.topbar {
+    max-width: 1000px;
+    margin: 0 auto 24px auto;
+    background: #17233d;
+    color: #ffffff;
+    padding: 14px 24px;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.topbar .brand { float: left; font-size: 16px; font-weight: bold; letter-spacing: 0.5px; }
+.topbar .brand span { color: #8fb0e0; }
+.topbar .userinfo { float: right; font-size: 13px; padding-top: 2px; }
+.topbar .userinfo a { color: #cfe0f5; margin-left: 14px; }
+
+.container { max-width: 1000px; margin: 0 auto; overflow: hidden; }
+
+.card {
+    background: #ffffff;
+    border: 1px solid #d7dce3;
+    border-radius: 6px;
+    padding: 22px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(30, 41, 59, 0.05);
+}
+
+.card h2 {
+    font-size: 15px;
+    color: #17233d;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #eef1f5;
+}
+
+.col-half {
+    width: 48%;
+    float: left;
+}
+.col-half.right { float: right; }
+.clear { clear: both; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+    text-align: left;
+    background: #f4f6f9;
+    color: #4b5563;
+    padding: 9px 10px;
+    border-bottom: 2px solid #e2e6ec;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+td { padding: 9px 10px; border-bottom: 1px solid #edf0f4; }
+tr:hover td { background: #f8fafc; }
+
+.badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: bold;
+}
+.badge.admin  { background: #e4ecfa; color: #2454a3; }
+.badge.cajero { background: #eef3ea; color: #4a7a3a; }
+.badge.deposito     { background: #e4f5e9; color: #1c6b3a; }
+.badge.retiro        { background: #fbe9e9; color: #9c2b2b; }
+.badge.transferencia { background: #fdf3e0; color: #96690f; }
+
+.saldo-big { font-size: 26px; font-weight: bold; color: #17233d; }
+
+.stat-box {
+    width: 31%;
+    float: left;
+    margin-right: 3%;
+    background: #f8fafc;
+    border: 1px solid #e2e6ec;
+    border-radius: 6px;
+    padding: 16px;
+    text-align: center;
+}
+.stat-box:last-child { margin-right: 0; }
+.stat-box .n { font-size: 22px; font-weight: bold; color: #17233d; }
+.stat-box .l { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+    <div class="login-wrap">
+        <h1>Banco 1</h1>
+        <p class="subtitle">Portal interno de empleados</p>
+        
+        <form action="/login" method="post">
+            <label>Usuario</label>
+            <input type="text" name="usuario" required autofocus>
+            <label>Contrasena</label>
+            <input type="password" name="contrasena" required>
+            <button type="submit">Ingresar</button>
+        </form>
+    </div>
+    
+</body>
+</html>
+
+########## 2) API /interbancaria
+>>> POST /interbancaria HTTP/1.1 (Content-Type application/json)
+>>> Respuesta observada ante POST sin/with body valido: HTTP 400/404 (no existen rutas públicas web)
+>>> La URL /interbancaria solo reporta POST desde el anillo; GET da 404.
+
+########## 3) CONEXIONES RED (desde FW, probado)
+>>> wget -T3 http://172.16.30.5:80/            -> 200 HTML portal
+>>> wget -T3 http://172.16.30.5:80/interbancaria -> 404 (piden POST con schema del anillo)
+>>> log consola: [WEB] "GET / HTTP/1.1" 200 / [WEB] "POST /interbancaria" (codigo segun body)
