@@ -1,0 +1,210 @@
+Building configuration...
+
+Current configuration : 4183 bytes
+!
+version 12.4
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+!
+hostname R1
+!
+boot-start-marker
+boot-end-marker
+!
+!
+no aaa new-model
+memory-size iomem 5
+no ip icmp rate-limit unreachable
+ip cef
+!
+!
+!
+!
+no ip domain lookup
+ip auth-proxy max-nodata-conns 3
+ip admission max-nodata-conns 3
+ip sla monitor 1
+ type echo protocol ipIcmpEcho 10.0.0.1 source-interface FastEthernet1/0
+ timeout 2000
+ threshold 2000
+ frequency 5
+ip sla monitor schedule 1 life forever start-time now
+ip sla monitor 2
+ type echo protocol ipIcmpEcho 10.0.0.17 source-interface FastEthernet2/0
+ timeout 2000
+ threshold 2000
+ frequency 5
+ip sla monitor schedule 2 life forever start-time now
+ip sla monitor 3
+ type echo protocol ipIcmpEcho 10.0.0.14 source-interface FastEthernet2/0
+ timeout 2000
+ threshold 2000
+ frequency 5
+ip sla monitor schedule 3 life forever start-time now
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+ip tcp synwait-time 5
+!
+track 1 rtr 1 reachability
+ delay down 6 up 3
+!
+track 2 rtr 2 reachability
+ delay down 6 up 3
+!
+track 3 rtr 3 reachability
+ delay down 6 up 3
+!
+!
+!
+!
+!
+interface FastEthernet0/0
+ description ENLACE_FW1
+ ip address 172.16.0.2 255.255.255.252
+ ip nat inside
+ ip virtual-reassembly
+ duplex auto
+ speed auto
+!
+interface Serial0/0
+ no ip address
+ shutdown
+ clock rate 2000000
+!
+interface FastEthernet0/1
+ description INTERNET
+ ip address dhcp
+ ip nat outside
+ ip virtual-reassembly
+ duplex auto
+ speed auto
+!
+interface Serial0/1
+ no ip address
+ shutdown
+ clock rate 2000000
+!
+interface Serial0/2
+ no ip address
+ shutdown
+ clock rate 2000000
+!
+interface FastEthernet1/0
+ description ENLACE_BANCO2
+ ip address 10.0.0.6 255.255.255.252
+ ip nat outside
+ ip virtual-reassembly
+ duplex auto
+ speed auto
+!
+interface FastEthernet2/0
+ description ENLACE_BANCO4
+ ip address 10.0.0.9 255.255.255.252
+ ip nat outside
+ ip virtual-reassembly
+ duplex auto
+ speed auto
+!
+ip local policy route-map RM-LOCAL-SLA
+ip forward-protocol nd
+ip route 10.0.0.0 255.255.255.252 10.0.0.5 track 1
+ip route 10.0.0.16 255.255.255.252 10.0.0.5 10 track 1
+ip route 10.0.0.8 255.255.255.252 10.0.0.5 10 track 1
+ip route 10.0.0.16 255.255.255.252 10.0.0.10 track 2
+ip route 10.0.0.12 255.255.255.252 10.0.0.10 track 3
+ip route 10.0.0.0 255.255.255.252 10.0.0.10 10 track 3
+ip route 10.0.0.4 255.255.255.252 10.0.0.10 10 track 3
+ip route 10.0.0.0 255.255.255.224 Null0 250
+ip route 172.16.1.0 255.255.255.0 172.16.0.1
+ip route 172.16.2.0 255.255.255.248 172.16.0.1
+ip route 172.16.3.0 255.255.255.248 172.16.0.1
+!
+!
+no ip http server
+no ip http secure-server
+ip nat inside source route-map RM-NAT-BANCO2 interface FastEthernet1/0 overload
+ip nat inside source route-map RM-NAT-INTERNET interface FastEthernet0/1 overload
+ip nat inside source static tcp 172.16.2.2 80 interface FastEthernet0/1 80
+ip nat inside source route-map RM-NAT-BANCO4 interface FastEthernet2/0 overload
+ip nat inside source static tcp 172.16.2.2 8080 10.0.0.6 80 extendable
+ip nat inside source static tcp 172.16.2.2 8081 10.0.0.9 80 extendable
+!
+ip access-list extended ACL-SLA-B2-B1
+ permit icmp host 10.0.0.6 host 10.0.0.1
+ip access-list extended ACL-SLA-B4-B5
+ permit icmp host 10.0.0.9 host 10.0.0.14
+ip access-list extended ACL-SLA-B4-B5-EAST
+ permit icmp host 10.0.0.9 host 10.0.0.17
+!
+access-list 1 permit 172.16.0.0 0.0.255.255
+access-list 110 permit ip host 172.16.2.2 any
+no cdp log mismatch duplex
+!
+route-map RM-LOCAL-SLA permit 12
+ match ip address ACL-SLA-B4-B5-EAST
+ set ip next-hop 10.0.0.10
+!
+route-map RM-LOCAL-SLA permit 15
+ match ip address ACL-SLA-B4-B5
+ set ip next-hop 10.0.0.10
+!
+route-map RM-LOCAL-SLA permit 20
+ match ip address ACL-SLA-B2-B1
+ set ip next-hop 10.0.0.5
+!
+route-map RM-NAT-BANCO4 permit 10
+ match ip address 110
+ match interface FastEthernet2/0
+!
+route-map RM-NAT-BANCO2 permit 10
+ match ip address 110
+ match interface FastEthernet1/0
+!
+route-map RM-NAT-INTERNET permit 10
+ match ip address 1
+ match interface FastEthernet0/1
+!
+!
+!
+control-plane
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+line con 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line aux 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line vty 0 4
+ login
+!
+!
+end

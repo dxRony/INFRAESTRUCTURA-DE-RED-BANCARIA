@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banco 3 | Banca Digital</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f9;
+            color: #1f2937;
+        }
+
+        header {
+            background: #163b65;
+            color: white;
+            padding: 22px 8%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            font-size: 24px;
+        }
+
+        header span {
+            font-size: 14px;
+            opacity: 0.85;
+        }
+
+        main {
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .welcome {
+            margin-bottom: 30px;
+        }
+
+        .welcome h2 {
+            color: #163b65;
+            margin-bottom: 8px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+
+        .card {
+            background: white;
+            padding: 28px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h3 {
+            color: #163b65;
+            margin-bottom: 20px;
+        }
+
+        .balance {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+
+        .status {
+            display: inline-block;
+            background: #e7f7ed;
+            color: #18743c;
+            padding: 7px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        label {
+            display: block;
+            margin-top: 14px;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #ccd3dc;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        button {
+            width: 100%;
+            margin-top: 22px;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            background: #163b65;
+            color: white;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0f2d4d;
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .notice {
+            margin-top: 15px;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        footer {
+            text-align: center;
+            margin: 40px 0 20px;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        @media (max-width: 700px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>Banco 3</h1>
+    <span>Plataforma de Servicios Financieros</span>
+</header>
+
+<main>
+
+    <section class="welcome">
+        <h2>Banca Digital</h2>
+        <p>Consulta y realiza operaciones financieras de forma segura.</p>
+    </section>
+
+    <div class="grid">
+
+        <section class="card">
+            <h3>Mi cuenta</h3>
+
+            <div style="margin-bottom: 18px; padding-bottom: 15px; border-bottom: 1px solid #e5e7eb;">
+                <label for="inputConsultarCuenta" style="margin-top: 0; margin-bottom: 6px; font-size: 13px; color: #4b5563;">Consultar cuenta local (Banco 3):</label>
+                <div style="display: flex; gap: 8px;">
+                    <input
+                        id="inputConsultarCuenta"
+                        type="number"
+                        min="1"
+                        value="1"
+                        placeholder="ID cuenta"
+                        onkeydown="if(event.keyCode===13){consultarCuentaPorId();}"
+                        style="width: 110px; padding: 8px 10px;"
+                    >
+                    <button
+                        id="btnConsultarCuenta"
+                        type="button"
+                        onclick="consultarCuentaPorId()"
+                        style="width: auto; margin-top: 0; padding: 8px 16px; font-size: 14px;"
+                    >
+                        Consultar
+                    </button>
+                </div>
+            </div>
+
+            <p id="titular" style="font-size: 15px; color: #4b5563;">Cargando titular...</p>
+            <strong id="numeroCuenta" style="font-size: 18px; color: #163b65;">#1</strong>
+
+            <p class="balance" id="saldo">Cargando...</p>
+
+            <span class="status" id="estadoCuenta">Cuenta activa</span>
+
+            <p class="notice">
+                Los datos de esta cuenta son obtenidos en tiempo real desde el servidor
+                PostgreSQL de Banco 3.
+            </p>
+        </section>
+
+        <section class="card">
+
+            <h3>Transferencias</h3>
+
+            <form id="transferForm" onsubmit="return false;">
+
+                <label for="tipoTransferencia">Tipo de transferencia</label>
+                <select id="tipoTransferencia" onchange="cambiarTipoTransferencia()">
+                    <option value="interna">Transferencia interna (Banco 3)</option>
+                    <option value="otro_banco">Transferencia a otro banco</option>
+                </select>
+
+                <div id="grupoBancoDestino" style="display: none;">
+                    <label for="bancoDestino">Banco destino</label>
+                    <select id="bancoDestino">
+                        <option value="Banco1">Banco 1</option>
+                    </select>
+                </div>
+
+                <label for="cuentaOrigen">Cuenta origen (Banco 3)</label>
+                <input
+                    id="cuentaOrigen"
+                    type="number"
+                    min="1"
+                    value="1"
+                    placeholder="NÃºmero de cuenta origen"
+                    required
+                >
+
+                <label id="labelCuentaDestino" for="cuentaDestino">Cuenta destino (Banco 3)</label>
+                <input
+                    id="cuentaDestino"
+                    type="number"
+                    min="1"
+                    placeholder="NÃºmero de cuenta destino"
+                    required
+                >
+
+                <label for="monto">Monto</label>
+                <input
+                    id="monto"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="Q 0.00"
+                    onkeydown="if(event.keyCode===13){ejecutarTransferencia();}"
+                    required
+                >
+
+                <button id="btnTransferir" type="button" onclick="ejecutarTransferencia()">
+                    Realizar transferencia
+                </button>
+
+                <!-- Bloques independientes para exito y error para evitar contaminacion visual -->
+                <div id="mensajeExito" style="display: none; margin-top: 15px; padding: 12px; border-radius: 6px; font-size: 14px; font-weight: bold; background: #e7f7ed; color: #18743c; border: 1px solid #a3e6be;"></div>
+
+                <div id="mensajeError" style="display: none; margin-top: 15px; padding: 12px; border-radius: 6px; font-size: 14px; font-weight: bold; background: #fde8e8; color: #9b1c1c; border: 1px solid #f8b4b4;"></div>
+
+            </form>
+
+            <p class="notice">
+                Las operaciones se procesan bajo protocolos seguros de compensaciÃ³n bancaria.
+            </p>
+
+        </section>
+
+    </div>
+
+</main>
+
+<footer>
+    Banco 3 Â· Infraestructura de Red Bancaria Â· 2026
+</footer>
+
+<script>
+var cuentaVisualizadaId = 1;
+var transferenciaEnCurso = false;
+
+function ocultarMensajes() {
+    var exito = document.getElementById('mensajeExito');
+    var error = document.getElementById('mensajeError');
+    if (exito) {
+        exito.style.display = 'none';
+        exito.textContent = '';
+    }
+    if (error) {
+        error.style.display = 'none';
+        error.textContent = '';
+    }
+}
+
+function mostrarExito(texto) {
+    var exito = document.getElementById('mensajeExito');
+    var error = document.getElementById('mensajeError');
+    if (error) {
+        error.style.display = 'none';
+        error.textContent = '';
+    }
+    if (exito) {
+        exito.textContent = texto;
+        exito.style.display = 'block';
+    }
+}
+
+function mostrarError(texto) {
+    var exito = document.getElementById('mensajeExito');
+    var error = document.getElementById('mensajeError');
+    if (exito) {
+        exito.style.display = 'none';
+        exito.textContent = '';
+    }
+    if (error) {
+        error.textContent = texto;
+        error.style.display = 'block';
+    }
+}
+
+function consultarCuenta(id) {
+    var numId = parseInt(id, 10);
+    if (isNaN(numId) || numId <= 0) {
+        mostrarError('Por favor ingrese un ID de cuenta valido.');
+        return;
+    }
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/cuenta/' + numId, true);
+
+    var handled = false;
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            if (handled) {
+                return;
+            }
+            handled = true;
+
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    if (data && data.ok && data.cuenta) {
+                        cuentaVisualizadaId = data.cuenta.id;
+                        document.getElementById('titular').textContent = data.cuenta.titular;
+                        document.getElementById('numeroCuenta').textContent = '#' + data.cuenta.id;
+                        document.getElementById('saldo').textContent = 'Q ' + Number(data.cuenta.saldo).toFixed(2);
+                        document.getElementById('inputConsultarCuenta').value = data.cuenta.id;
+
+                        var estado = document.getElementById('estadoCuenta');
+                        if (estado) {
+                            estado.textContent = 'Cuenta activa';
+                            estado.style.background = '#e7f7ed';
+                            estado.style.color = '#18743c';
+                        }
+                    }
+                } catch (e) {
+                    mostrarError('Error al procesar los datos de la cuenta.');
+                }
+            } else {
+                document.getElementById('titular').textContent = 'Cuenta no encontrada';
+                document.getElementById('numeroCuenta').textContent = '#' + numId;
+                document.getElementById('saldo').textContent = 'Q 0.00';
+                var estado = document.getElementById('estadoCuenta');
+                if (estado) {
+                    estado.textContent = 'No encontrada';
+                    estado.style.background = '#fde8e8';
+                    estado.style.color = '#9b1c1c';
+                }
+            }
+        }
+    };
+    xhr.send();
+}
+
+function consultarCuentaPorId() {
+    var val = document.getElementById('inputConsultarCuenta').value;
+    consultarCuenta(val);
+}
+
+function cambiarTipoTransferencia() {
+    var tipo = document.getElementById('tipoTransferencia').value;
+    var grupoBanco = document.getElementById('grupoBancoDestino');
+    var labelDestino = document.getElementById('labelCuentaDestino');
+    ocultarMensajes();
+
+    if (tipo === 'otro_banco') {
+        grupoBanco.style.display = 'block';
+        labelDestino.textContent = 'Cuenta destino (Banco 1)';
+    } else {
+        grupoBanco.style.display = 'none';
+        labelDestino.textContent = 'Cuenta destino (Banco 3)';
+    }
+}
+
+function ejecutarTransferencia() {
+    if (transferenciaEnCurso) {
+        return;
+    }
+
+    ocultarMensajes();
+
+    var tipo = document.getElementById('tipoTransferencia').value;
+    var origen = parseInt(document.getElementById('cuentaOrigen').value, 10);
+    var destino = parseInt(document.getElementById('cuentaDestino').value, 10);
+    var monto = parseFloat(document.getElementById('monto').value);
+
+    if (isNaN(origen) || isNaN(destino) || isNaN(monto)) {
+        mostrarError('Por favor complete todos los campos obligatorios.');
+        return;
+    }
+
+    if (origen <= 0 || destino <= 0) {
+        mostrarError('Los numeros de cuenta deben ser mayores a 0.');
+        return;
+    }
+
+    if (monto <= 0) {
+        mostrarError('El monto debe ser mayor a 0.');
+        return;
+    }
+
+    if (tipo === 'interna' && origen === destino) {
+        mostrarError('La cuenta origen y la cuenta destino no pueden ser iguales en transferencias internas.');
+        return;
+    }
+
+    var url = '';
+    var payload = {
+        cuenta_origen: origen,
+        cuenta_destino: destino,
+        monto: monto
+    };
+
+    if (tipo === 'interna') {
+        url = '/api/transferencia/interna';
+    } else {
+        url = '/api/transferencia/banco1';
+    }
+
+    var btnSubmit = document.getElementById('btnTransferir');
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = 'Procesando...';
+    transferenciaEnCurso = true;
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+
+    var handled = false;
+
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+            if (handled) {
+                return;
+            }
+            handled = true;
+            transferenciaEnCurso = false;
+            btnSubmit.disabled = false;
+            btnSubmit.textContent = 'Realizar transferencia';
+
+            var resp = null;
+            try {
+                resp = JSON.parse(xhr.responseText);
+            } catch (e) {
+                resp = null;
+            }
+
+            if (xhr.status >= 200 && xhr.status < 300 && resp && resp.ok) {
+                var msg = 'Transferencia exitosa.';
+                if (resp.mensaje) {
+                    msg = resp.mensaje + '.';
+                }
+
+                var nuevoSaldo = null;
+                if (resp.saldo_origen !== undefined) {
+                    nuevoSaldo = resp.saldo_origen;
+                } else if (resp.saldo !== undefined) {
+                    nuevoSaldo = resp.saldo;
+                }
+
+                if (nuevoSaldo !== null) {
+                    msg += ' Saldo restante: Q ' + Number(nuevoSaldo).toFixed(2);
+                    if (origen === cuentaVisualizadaId) {
+                        document.getElementById('saldo').textContent = 'Q ' + Number(nuevoSaldo).toFixed(2);
+                    }
+                } else {
+                    if (origen === cuentaVisualizadaId) {
+                        consultarCuenta(cuentaVisualizadaId);
+                    }
+                }
+
+                if (tipo === 'interna' && destino === cuentaVisualizadaId && resp.saldo_destino !== undefined) {
+                    document.getElementById('saldo').textContent = 'Q ' + Number(resp.saldo_destino).toFixed(2);
+                }
+
+                mostrarExito(msg);
+
+                document.getElementById('cuentaDestino').value = '';
+                document.getElementById('monto').value = '';
+
+            } else {
+                var errorMsg = 'Error al procesar la transferencia.';
+                if (resp && resp.error) {
+                    errorMsg = resp.error;
+                } else if (xhr.responseText) {
+                    errorMsg = 'Error (' + xhr.status + '): ' + xhr.responseText;
+                }
+                mostrarError(errorMsg);
+            }
+        }
+    };
+
+    xhr.send(JSON.stringify(payload));
+}
+
+// Carga inicial de cuenta 1
+consultarCuenta(1);
+</script>
+
+</body>
+</html>
