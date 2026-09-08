@@ -17,32 +17,106 @@ LAYOUT = """
 <html lang="es">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Banco 2 - WEB-PUB</title>
   <style>
-    body { font-family: sans-serif; margin: 2rem; background:#f4f4f4; }
-    .caja { background:#fff; border:1px solid #ccc; border-radius:6px; padding:1.2rem; max-width:600px; margin-bottom:1rem; }
-    input, select { display:block; margin:.4rem 0 1rem; padding:.4rem; width:100%; max-width:300px; }
-    button { padding:.5rem 1rem; cursor:pointer; }
-    table { border-collapse: collapse; width:100%; max-width:700px; }
-    td, th { border:1px solid #ccc; padding:.4rem .6rem; text-align:left; }
-    nav a { margin-right:1rem; }
-    .msg-ok { color: green; }
-    .msg-error { color: red; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body {
+      font-family:"DejaVu Sans", "Liberation Sans", Arial, sans-serif;
+      background:#eef1f5; color:#22303c; line-height:1.5; padding:1rem;
+    }
+    .wrap { max-width:1000px; margin:0 auto; }
+    .header {
+      background:linear-gradient(100deg, #0d3b5f 0%, #1c6ea4 100%);
+      color:#fff; border-radius:10px 10px 0 0;
+      padding:1rem 1.4rem;
+      display:flex; flex-wrap:wrap; align-items:center;
+      justify-content:space-between;
+    }
+    .header h2 { font-size:1.25rem; font-weight:600; }
+    .header .tagline { font-size:.8rem; opacity:.85; }
+    .userbar { font-size:.9rem; }
+    .userbar a { color:#cfe6f5; margin-left:1rem; }
+    .userbar a:hover { color:#fff; text-decoration:underline; }
+    .content {
+      background:#fff;
+      border:1px solid #e1e6ec; border-top:0;
+      border-radius:0 0 10px 10px;
+      padding:1.5rem;
+      box-shadow:0 2px 6px rgba(0,0,0,.06);
+    }
+    .caja {
+      background:#fbfcfe; border:1px solid #e4e9ef; border-radius:8px;
+      padding:1.1rem 1.3rem; margin-bottom:1.2rem;
+    }
+    .caja h3 {
+      color:#0d3b5f; font-size:1.02rem; margin-bottom:.7rem;
+      padding-bottom:.45rem; border-bottom:1px solid #eef1f5;
+    }
+    label { display:block; font-size:.83rem; color:#4a5a6a; margin:.75rem 0 .25rem; }
+    input, select {
+      display:block; width:100%; max-width:340px;
+      padding:.5rem .6rem; font-size:.93rem;
+      border:1px solid #c9d3dd; border-radius:6px; background:#fff;
+    }
+    input:focus, select:focus { border-color:#1c6ea4; outline:1px solid #9fc7e0; }
+    button {
+      margin-top:1rem; padding:.55rem 1.4rem; cursor:pointer;
+      background:#1c6ea4; color:#fff; border:0; border-radius:6px; font-size:.93rem;
+    }
+    button:hover { background:#0d3b5f; }
+    button.danger { background:#b03a3a; }
+    button.danger:hover { background:#8a2b2b; }
+    button.secundario { background:#8a97a5; }
+    button.secundario:hover { background:#6f7d8c; }
+    table { border-collapse:collapse; width:100%; margin-top:.4rem; background:#fff; }
+    th {
+      background:#0d3b5f; color:#fff; text-align:left;
+      padding:.5rem .7rem; font-size:.83rem; font-weight:600;
+    }
+    td { padding:.5rem .7rem; border-bottom:1px solid #eef1f5; font-size:.9rem; }
+    tr:nth-child(even) td { background:#f7f9fb; }
+    td.der, th.der { text-align:right; }
+    a { color:#1c6ea4; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    .volver { display:inline-block; margin-top:1rem; font-size:.9rem; }
+    .msg-ok, .msg-error {
+      padding:.7rem 1rem; border-radius:6px; margin-bottom:1rem; font-size:.9rem;
+    }
+    .msg-ok { background:#e8f6ec; color:#1e6a35; border:1px solid #bfe6c9; }
+    .msg-error { background:#fdecea; color:#a12c2c; border:1px solid #f3c6c2; }
+    .centrado { max-width:440px; margin:2rem auto; }
+    .grid-2 { display:flex; flex-wrap:wrap; margin:-.6rem; }
+    .grid-2 > * { flex:1 1 280px; margin:.6rem; min-width:0; }
+    .vacio { color:#8a97a5; font-style:italic; padding:.4rem 0; }
+    @media (max-width:640px) {
+      .header { flex-direction:column; text-align:center; }
+      .userbar { margin-top:.5rem; }
+      .userbar a { margin:0 .5rem; }
+    }
   </style>
 </head>
 <body>
-  <h2>Banco 2 &mdash; Banca de Inversion</h2>
-  {% if session.get('usuario') %}
-    <nav>
-      <span>{{ session['usuario']['nombre_completo'] }} ({{ session['usuario']['rol'] }})</span>
-      &nbsp;|&nbsp; <a href="{{ url_for('logout') }}">Cerrar sesion</a>
-    </nav>
-    <hr>
-  {% endif %}
-  {% if msg %}
-    <p class="{{ 'msg-ok' if ok else 'msg-error' }}">{{ msg }}</p>
-  {% endif %}
-  {{ contenido | safe }}
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h2>Banco 2 &mdash; Banca de Inversion</h2>
+        <span class="tagline">Portal WEB-PUB</span>
+      </div>
+      {% if session.get('usuario') %}
+        <nav class="userbar">
+          <span>{{ session['usuario']['nombre_completo'] }} ({{ session['usuario']['rol'] }})</span>
+          <a href="{{ url_for('logout') }}">Cerrar sesion</a>
+        </nav>
+      {% endif %}
+    </div>
+    <div class="content">
+      {% if msg %}
+        <p class="{{ 'msg-ok' if ok else 'msg-error' }}">{{ msg }}</p>
+      {% endif %}
+      {{ contenido | safe }}
+    </div>
+  </div>
 </body>
 </html>
 """
@@ -111,7 +185,7 @@ def login():
         return redirect(url_for(data["usuario"]["rol"]))
 
     return render("""
-    <div class="caja">
+    <div class="caja centrado">
       <h3>Iniciar sesion</h3>
       <form method="post">
         <label>Usuario</label>
@@ -196,21 +270,23 @@ def cliente_movimientos(cuenta_id):
 @requiere_rol("cajero")
 def cajero():
     return render("""
-    <div class="caja">
-      <h3>Deposito</h3>
-      <form method="post" action="{{ url_for('cajero_deposito') }}">
-        <label>Cuenta ID</label><input name="cuenta_id" required>
-        <label>Monto</label><input name="monto" required>
-        <button type="submit">Depositar</button>
-      </form>
-    </div>
-    <div class="caja">
-      <h3>Retiro</h3>
-      <form method="post" action="{{ url_for('cajero_retiro') }}">
-        <label>Cuenta ID</label><input name="cuenta_id" required>
-        <label>Monto</label><input name="monto" required>
-        <button type="submit">Retirar</button>
-      </form>
+    <div class="grid-2">
+      <div class="caja">
+        <h3>Deposito</h3>
+        <form method="post" action="{{ url_for('cajero_deposito') }}">
+          <label>Cuenta ID</label><input name="cuenta_id" required>
+          <label>Monto</label><input name="monto" required>
+          <button type="submit">Depositar</button>
+        </form>
+      </div>
+      <div class="caja">
+        <h3>Retiro</h3>
+        <form method="post" action="{{ url_for('cajero_retiro') }}">
+          <label>Cuenta ID</label><input name="cuenta_id" required>
+          <label>Monto</label><input name="monto" required>
+          <button type="submit" class="danger">Retirar</button>
+        </form>
+      </div>
     </div>
     <div class="caja">
       <h3>Transferencia interna (dentro de Banco 2)</h3>
@@ -219,20 +295,6 @@ def cajero():
         <label>Cuenta destino</label><input name="cuenta_destino" required>
         <label>Monto</label><input name="monto" required>
         <button type="submit">Transferir</button>
-      </form>
-    </div>
-    <div class="caja">
-      <h3>Transferencia interbancaria (a otro banco)</h3>
-      <form method="post" action="{{ url_for('cajero_interbancaria') }}">
-        <label>Cuenta origen (propia)</label><input name="cuenta_origen" required>
-        <label>Banco destino</label>
-        <select name="banco_destino">
-          <option value="Banco1">Banco1</option>
-          <option value="Banco3">Banco3</option>
-        </select>
-        <label>Cuenta destino remota (ID en el otro banco)</label><input name="cuenta_destino_remota" required>
-        <label>Monto</label><input name="monto" required>
-        <button type="submit">Enviar</button>
       </form>
     </div>
     """)
@@ -304,27 +366,6 @@ def cajero_transferencia():
     )
 
 
-@app.route("/cajero/interbancaria", methods=["POST"])
-@requiere_rol("cajero")
-def cajero_interbancaria():
-    body = {
-        "cuenta_origen": int(request.form["cuenta_origen"]),
-        "banco_destino": request.form["banco_destino"],
-        "cuenta_destino_remota": int(request.form["cuenta_destino_remota"]),
-        "monto": float(request.form["monto"]),
-    }
-    data = requests.post(
-        f"{API_INTERNA}/transacciones/interbancaria", json=body, timeout=8
-    ).json()
-    if data.get("ok"):
-        return redirect(
-            url_for("cajero", msg="Transferencia interbancaria enviada", ok="1")
-        )
-    return redirect(
-        url_for("cajero", msg=data.get("error", "error desconocido"), ok="0")
-    )
-
-
 # ---------------------------------------------------------------------------
 # Rol: analista
 # ---------------------------------------------------------------------------
@@ -379,51 +420,55 @@ def admin():
     )
     return render(
         """
-    <div class="caja">
-      <h3>Usuarios</h3>
-      <table>
-        <tr><th>ID</th><th>Username</th><th>Nombre</th><th>Rol</th></tr>
-        {% for u in usuarios %}
-        <tr><td>{{ u['id'] }}</td><td>{{ u['username'] }}</td><td>{{ u['nombre_completo'] }}</td><td>{{ u['rol'] }}</td></tr>
-        {% endfor %}
-      </table>
-    </div>
-    <div class="caja">
-      <h3>Cuentas</h3>
-      <table>
-        <tr><th>ID</th><th>Numero</th><th>Saldo</th><th>Titular</th></tr>
-        {% for c in cuentas %}
-        <tr><td>{{ c['id'] }}</td><td>{{ c['numero_cuenta'] }}</td><td>Q {{ '%.2f'|format(c['saldo']) }}</td><td>{{ c['nombre_completo'] or '-' }}</td></tr>
-        {% endfor %}
-      </table>
-    </div>
-    <div class="caja">
-      <h3>Blacklist Banco 1</h3>
-      {% if blacklist_data %}
-        <p><strong>Total:</strong> {{ blacklist_data.total }}</p>
+    <div class="grid-2">
+      <div class="caja">
+        <h3>Usuarios</h3>
         <table>
-          <tr><th>Nombre</th></tr>
-          {% for nombre in blacklist_data.lista_negra_clientes %}
-          <tr><td>{{ nombre }}</td></tr>
+          <tr><th>ID</th><th>Username</th><th>Nombre</th><th>Rol</th></tr>
+          {% for u in usuarios %}
+          <tr><td>{{ u['id'] }}</td><td>{{ u['username'] }}</td><td>{{ u['nombre_completo'] }}</td><td>{{ u['rol'] }}</td></tr>
           {% endfor %}
         </table>
-      {% else %}
-        <p class="msg-error">No se pudo obtener la blacklist: {{ blacklist_resp.get('error', 'error desconocido') }}</p>
-      {% endif %}
-    </div>
-    <div class="caja">
-      <h3>Blacklist Banco 4</h3>
-      {% if blacklist_b4_data %}
-        <p><strong>Total:</strong> {{ blacklist_b4_data.total }}</p>
+      </div>
+      <div class="caja">
+        <h3>Cuentas</h3>
         <table>
-          <tr><th>Nombre</th></tr>
-          {% for nombre in blacklist_b4_data.lista_negra_clientes %}
-          <tr><td>{{ nombre }}</td></tr>
+          <tr><th>ID</th><th>Numero</th><th class="der">Saldo</th><th>Titular</th></tr>
+          {% for c in cuentas %}
+          <tr><td>{{ c['id'] }}</td><td>{{ c['numero_cuenta'] }}</td><td class="der">Q {{ '%.2f'|format(c['saldo']) }}</td><td>{{ c['nombre_completo'] or '-' }}</td></tr>
           {% endfor %}
         </table>
-      {% else %}
-        <p class="msg-error">No se pudo obtener la blacklist: {{ blacklist_b4_resp.get('error', 'error desconocido') }}</p>
-      {% endif %}
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="caja">
+        <h3>Blacklist Banco 1</h3>
+        {% if blacklist_data %}
+          <p><strong>Total:</strong> {{ blacklist_data.total }}</p>
+          <table>
+            <tr><th>Nombre</th></tr>
+            {% for nombre in blacklist_data.lista_negra_clientes %}
+            <tr><td>{{ nombre }}</td></tr>
+            {% endfor %}
+          </table>
+        {% else %}
+          <p class="msg-error">No se pudo obtener la blacklist: {{ blacklist_resp.get('error', 'error desconocido') }}</p>
+        {% endif %}
+      </div>
+      <div class="caja">
+        <h3>Blacklist Banco 4</h3>
+        {% if blacklist_b4_data %}
+          <p><strong>Total:</strong> {{ blacklist_b4_data.total }}</p>
+          <table>
+            <tr><th>Nombre</th></tr>
+            {% for nombre in blacklist_b4_data.lista_negra_clientes %}
+            <tr><td>{{ nombre }}</td></tr>
+            {% endfor %}
+          </table>
+        {% else %}
+          <p class="msg-error">No se pudo obtener la blacklist: {{ blacklist_b4_resp.get('error', 'error desconocido') }}</p>
+        {% endif %}
+      </div>
     </div>
     """,
         usuarios=usuarios,

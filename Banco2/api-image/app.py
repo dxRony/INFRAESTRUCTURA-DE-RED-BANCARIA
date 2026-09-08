@@ -22,29 +22,11 @@ PUERTO_INTERBANCO = 5001  # habla con otros bancos (expuesto hacia redes de tran
 
 
 # ---------------------------------------------------------------------------
-# Adaptadores por banco vecino.
+# Blacklist con failover.
 #
-# El contrato ideal era uno solo para los 5 bancos (spec-comunicacion-
-# interbancaria.md), pero en la practica cada quien implemento su endpoint
-# receptor distinto. Cada funcion de aqui abajo sabe como hablarle a UN banco
-# especifico: arma el request como ese banco lo espera, e interpreta su
-# respuesta. Devuelve siempre (exito: bool, detalle: str).
+# Banco 2 NO inicia transferencias interbancarias: solo hace operaciones
+# internas y recibe depositos desde otros bancos (Banco 1 y Banco 4).
 # ---------------------------------------------------------------------------
-def _enviar_a_banco1(cuenta_origen, cuenta_destino_remota, monto):
-    """Contrato real de Banco 1 (confirmado por su equipo, no del spec grupal)."""
-    url = "http://10.0.0.1:80/interbancaria"
-    payload = {
-        "cuenta_origen": str(cuenta_origen),
-        "cuenta_destino": str(cuenta_destino_remota),
-        "monto": monto,
-    }
-    resp = requests.post(url, json=payload, timeout=5)
-    data = resp.json()
-    codigo = data.get("codigo", "SIN_CODIGO")
-    exito = resp.status_code == 200 and codigo == "TRANSFERENCIA_ACEPTADA"
-    return exito, codigo
-
-
 def _consultar_con_failover(banco, urls, parseador=None):
     """GET con failover sobre una lista de URLs (principal y respaldo/s).
 
@@ -154,29 +136,6 @@ def _obtener_blacklist_banco4():
         ],
         parseador=_normalizar_blacklist_b4,
     )
-
-
-# Banco 3 aun no ha compartido su contrato real - usamos el del spec grupal
-# como placeholder hasta que confirmen. AJUSTAR cuando lo definan.
-def _enviar_a_banco3(cuenta_origen, cuenta_destino_remota, monto):
-    url = (
-        "http://10.0.0.6:5001/interbanco/deposito"  # PENDIENTE confirmar IP/puerto real
-    )
-    payload = {
-        "cuenta_destino": cuenta_destino_remota,
-        "monto": monto,
-        "banco_origen": NOMBRE_BANCO,
-    }
-    resp = requests.post(url, json=payload, timeout=5)
-    data = resp.json()
-    exito = data.get("ok") is True
-    return exito, data.get("error", "ok") if not exito else "ok"
-
-
-BANCOS_VECINOS = {
-    "Banco1": _enviar_a_banco1,
-    "Banco3": _enviar_a_banco3,
-}
 
 
 def get_conn():
@@ -351,69 +310,6 @@ def transferencia_interna():
         )
     conn.close()
     return jsonify(ok=True)
-
-
-@app_interno.post("/transacciones/interbancaria")
-def transferencia_interbancaria():
-    """El cajero envia dinero desde una cuenta propia hacia otro banco."""
-    data = request.get_json(force=True)
-    cuenta_origen = data.get("cuenta_origen")
-    banco_destino = data.get("banco_destino")  # ej. "Banco1"
-    cuenta_destino_remota = data.get(
-        "cuenta_destino_remota"
-    )  # id local en el OTRO banco
-    monto = data.get("monto")
-
-    if banco_destino not in BANCOS_VECINOS:
-        return jsonify(ok=False, error="banco destino desconocido"), 400
-    if not cuenta_origen or not cuenta_destino_remota or not monto or monto <= 0:
-        return jsonify(ok=False, error="datos invalidos"), 400
-
-    conn = get_conn()
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT saldo FROM cuentas WHERE id=%s FOR UPDATE", (cuenta_origen,)
-        )
-        cuenta = cur.fetchone()
-        if not cuenta:
-            conn.close()
-            return jsonify(ok=False, error="cuenta origen no encontrada"), 404
-        if cuenta["saldo"] < monto:
-            conn.close()
-            return jsonify(ok=False, error="fondos insuficientes"), 400
-
-        # 1. Debitar primero, localmente (regla del contrato del grupo)
-        cur.execute(
-            "UPDATE cuentas SET saldo = saldo - %s WHERE id=%s", (monto, cuenta_origen)
-        )
-    conn.close()
-
-    # 2. Avisar al banco destino, usando el adaptador de ESE banco especifico
-    #    (cada banco puede tener un contrato distinto de recepcion)
-    try:
-        exito, detalle = BANCOS_VECINOS[banco_destino](
-            cuenta_origen, cuenta_destino_remota, monto
-        )
-    except requests.RequestException:
-        exito, detalle = False, "banco destino no responde"
-
-    conn = get_conn()
-    with conn.cursor() as cur:
-        if exito:
-            cur.execute(
-                """INSERT INTO transacciones (tipo, cuenta_origen_id, banco_contraparte, monto)
-                   VALUES ('interbancaria_enviada', %s, %s, %s)""",
-                (cuenta_origen, banco_destino, monto),
-            )
-            conn.close()
-            return jsonify(ok=True)
-
-        # 3. Revertir el debito si el banco destino rechazo o no respondio
-        cur.execute(
-            "UPDATE cuentas SET saldo = saldo + %s WHERE id=%s", (monto, cuenta_origen)
-        )
-    conn.close()
-    return jsonify(ok=False, error=detalle), 400
 
 
 @app_interno.get("/dashboard/mercado")
